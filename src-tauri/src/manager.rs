@@ -300,6 +300,11 @@ impl Manager {
 		Ok(trimmed_state(&state))
 	}
 
+	/// The process id of the project's omp, when it is running.
+	pub fn omp_pid(&self, id: &str) -> Option<u32> {
+		self.client(id).ok().and_then(|client| client.pid())
+	}
+
 	fn project(&self, id: &str) -> Result<Project, String> {
 		self.projects
 			.lock()

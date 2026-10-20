@@ -111,6 +111,52 @@ fn two_projects_run_at_the_same_time() {
 	assert_eq!(manager.list().len(), 2);
 }
 
+#[test]
+fn stopping_a_project_ends_its_omp_process() {
+	let temp = tempfile::tempdir().expect("a temp dir");
+	let (_collector, manager) = manager(temp.path());
+
+	let path = temp.path().to_str().expect("a utf-8 path");
+	let project = manager.add(path).expect("the project is added");
+	manager.open(&project.id).expect("the project opens");
+
+	let pid = manager.omp_pid(&project.id).expect("omp should be running");
+	assert!(process_alive(pid), "omp should be running, pid {pid}");
+
+	manager.close(&project.id);
+	assert!(manager.omp_pid(&project.id).is_none(), "the project should have no omp left");
+
+	let deadline = Instant::now() + Duration::from_secs(10);
+	while process_alive(pid) {
+		assert!(Instant::now() < deadline, "omp (pid {pid}) should have exited: {}", process_state(pid));
+		std::thread::sleep(Duration::from_millis(100));
+	}
+}
+
+/// What the operating system says about a process.
+fn process_state(pid: u32) -> String {
+	std::process::Command::new("ps")
+		.arg("-p")
+		.arg(pid.to_string())
+		.arg("-o")
+		.arg("pid,ppid,stat,command")
+		.output()
+		.map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+		.unwrap_or_default()
+}
+
+/// Whether a process is still running.
+fn process_alive(pid: u32) -> bool {
+	std::process::Command::new("ps")
+		.arg("-p")
+		.arg(pid.to_string())
+		.arg("-o")
+		.arg("pid=")
+		.output()
+		.map(|output| !String::from_utf8_lossy(&output.stdout).trim().is_empty())
+		.unwrap_or(false)
+}
+
 /// Needs a working model and network access.
 #[test]
 #[ignore = "needs a model with credentials"]
