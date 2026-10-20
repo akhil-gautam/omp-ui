@@ -1,0 +1,46 @@
+--- a/src/frame.rs
++++ b/src/frame.rs
+@@ -129,14 +129,16 @@
+ /// `None` when malformed.
+ fn decode_base64(text: &str) -> Option<Vec<u8>> {
+ 	let bytes = text.as_bytes();
+-	let (quads, rest) = bytes.as_chunks::<4>();
+-	if quads.is_empty() || !rest.is_empty() {
++	let quads = bytes.chunks_exact(4);
++	let rest = quads.remainder();
++	let count = quads.len();
++	if count == 0 || !rest.is_empty() {
+ 		return None;
+ 	}
+-	let mut out = Vec::with_capacity(quads.len() * 3);
+-	for (position, quad) in quads.iter().enumerate() {
++	let mut out = Vec::with_capacity(count * 3);
++	for (position, quad) in quads.enumerate() {
+ 		let padding = quad.iter().rev().take_while(|&&byte| byte == b'=').count();
+-		if padding > 2 || (padding > 0 && position + 1 != quads.len()) {
++		if padding > 2 || (padding > 0 && position + 1 != count) {
+ 			return None;
+ 		}
+ 		let mut bits = 0u32;
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -413,12 +413,13 @@
+ 			Ok(decoded) => decoded,
+ 			Err(error) => {
+ 				let error = error.to_string();
+-				if frame.get("type").and_then(Value::as_str) == Some("prompt_result")
+-					&& let Some(id) = frame.get("id").and_then(Value::as_str)
+-					&& let Some(collector) = self.state().prompts.get(id)
+-				{
+-					let message = format!("Failed to parse prompt_result: {error}");
+-					let _ = collector.send(PromptSignal::Failed(Error::Protocol(message)));
++				if frame.get("type").and_then(Value::as_str) == Some("prompt_result") {
++					if let Some(id) = frame.get("id").and_then(Value::as_str) {
++						if let Some(collector) = self.state().prompts.get(id) {
++							let message = format!("Failed to parse prompt_result: {error}");
++							let _ = collector.send(PromptSignal::Failed(Error::Protocol(message)));
++						}
++					}
+ 				}
+ 				let _ = events.send(Event::Undecodable { raw: frame, error });
+ 				return;
