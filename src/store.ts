@@ -32,6 +32,8 @@ export type Workspace = {
 	commands: CommandInfo[];
 	/** A dialog the agent is waiting on. */
 	pendingRequest: UiRequest | null;
+	/** What omp last said it was doing. */
+	statusText: string;
 	queue: { steering: string[]; followUp: string[] };
 	notices: Notice[];
 	subagents: SubagentSummary[];
@@ -100,6 +102,7 @@ export function reducer(store: Store, action: Action): Store {
 						state,
 						commands,
 						pendingRequest: previous?.pendingRequest ?? null,
+						statusText: previous?.statusText ?? "",
 						queue: previous?.queue ?? { steering: [], followUp: [] },
 						notices: previous?.notices ?? [],
 						subagents: previous?.subagents ?? [],
@@ -345,6 +348,17 @@ function applyEvent(workspace: Workspace, event: UiEvent): Workspace {
 			const request = parseUiRequest(event.payload);
 			return request ? { ...workspace, pendingRequest: request } : workspace;
 		}
+
+		case "uiRequestCancelled": {
+			const { targetId } = event.payload;
+			if (workspace.pendingRequest?.id !== targetId) {
+				return workspace;
+			}
+			return { ...workspace, pendingRequest: null };
+		}
+
+		case "statusText":
+			return { ...workspace, statusText: event.payload.text };
 
 		case "subagent": {
 			const { payload } = event.payload;

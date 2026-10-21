@@ -321,6 +321,16 @@ export const uiEventSchema = z.discriminatedUnion("kind", [
 	z.object({ projectId: z.string(), kind: z.literal("uiRequest"), payload: z.unknown() }),
 	z.object({
 		projectId: z.string(),
+		kind: z.literal("uiRequestCancelled"),
+		payload: z.object({ targetId: z.string() }),
+	}),
+	z.object({
+		projectId: z.string(),
+		kind: z.literal("statusText"),
+		payload: z.object({ text: z.string() }),
+	}),
+	z.object({
+		projectId: z.string(),
 		kind: z.literal("commands"),
 		payload: z.object({ commands: z.array(commandSchema) }),
 	}),

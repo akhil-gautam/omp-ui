@@ -5,7 +5,8 @@
 //! frontend.
 
 use omp_rpc::wire::{
-	AgentMessage, AssistantMessageEvent, AvailableSlashCommand, RpcAgentEvent, RpcNotification,
+	AgentMessage, AssistantMessageEvent, AvailableSlashCommand, ExtensionUiRequest, RpcAgentEvent,
+	RpcNotification,
 };
 use omp_rpc::Event;
 use serde_json::{json, Value};
@@ -43,7 +44,8 @@ pub fn from_event(project_id: &str, event: Event) -> Option<UiEvent> {
 	}
 }
 
-fn from_notification(project_id: &str, notification: RpcNotification) -> Option<UiEvent> {
+/// Normalises one notification from omp into the webview's event vocabulary.
+pub fn from_notification(project_id: &str, notification: RpcNotification) -> Option<UiEvent> {
 	match notification {
 		RpcNotification::RpcAgentEvent(event) => from_agent_event(project_id, &event),
 		RpcNotification::PromptResult(result) => Some(UiEvent {
@@ -55,11 +57,41 @@ fn from_notification(project_id: &str, notification: RpcNotification) -> Option<
 			})
 			.unwrap_or(Value::Null),
 		}),
-		RpcNotification::ExtensionUiRequest(request) => Some(UiEvent {
-			project_id: project_id.to_owned(),
-			kind: EventKind::UiRequest,
-			payload: serde_json::to_value(request).unwrap_or(Value::Null),
-		}),
+		RpcNotification::ExtensionUiRequest(request) => match &request {
+			// Only the methods that expect an answer become dialogs. The
+			// presentation ones are fire-and-forget, and showing them as
+			// dialogs would leave a modal the user cannot get rid of.
+			ExtensionUiRequest::Select(_)
+			| ExtensionUiRequest::Confirm(_)
+			| ExtensionUiRequest::Input(_)
+			| ExtensionUiRequest::Editor(_)
+			| ExtensionUiRequest::Ask(_)
+			| ExtensionUiRequest::OpenUrl(_) => Some(UiEvent {
+				project_id: project_id.to_owned(),
+				kind: EventKind::UiRequest,
+				payload: serde_json::to_value(request).unwrap_or(Value::Null),
+			}),
+			// A cancelled dialog has to disappear from the UI.
+			ExtensionUiRequest::Cancel(cancel) => Some(UiEvent {
+				project_id: project_id.to_owned(),
+				kind: EventKind::UiRequestCancelled,
+				payload: json!({ "targetId": cancel.target_id }),
+			}),
+			// omp's own status line.
+			ExtensionUiRequest::SetStatus(status) => status.status_text.as_ref().map(|text| UiEvent {
+				project_id: project_id.to_owned(),
+				kind: EventKind::StatusText,
+				payload: json!({ "text": text }),
+			}),
+			// A message from an extension.
+			ExtensionUiRequest::Notify(notify) => Some(UiEvent {
+				project_id: project_id.to_owned(),
+				kind: EventKind::Notice,
+				payload: json!({ "level": "info", "message": notify.message }),
+			}),
+			// Widgets, titles and editor text are omp's own chrome.
+			_ => None,
+		},
 		RpcNotification::AvailableCommandsUpdate(update) => Some(UiEvent {
 			project_id: project_id.to_owned(),
 			kind: EventKind::Commands,

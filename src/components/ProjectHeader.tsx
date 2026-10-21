@@ -69,6 +69,9 @@ export default function ProjectHeader({ workspace, onError }: Props) {
 					<span className="path" title={project.path}>
 						{project.path}
 					</span>
+					{workspace.statusText ? (
+						<span className="status-text">{workspace.statusText}</span>
+					) : null}
 				</div>
 
 				<div className="header-actions">

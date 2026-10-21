@@ -39,6 +39,8 @@ pub enum EventKind {
 	Queue,
 	Notice,
 	UiRequest,
+	UiRequestCancelled,
+	StatusText,
 	Commands,
 	Subagent,
 	PromptResult,
