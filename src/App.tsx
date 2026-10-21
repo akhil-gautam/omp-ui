@@ -21,7 +21,7 @@ export default function App() {
 		if (stored === "light" || stored === "dark") {
 			return stored;
 		}
-		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+		return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 	});
 	const composer = useRef<HTMLTextAreaElement>(null);
 	const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -31,6 +31,14 @@ export default function App() {
 		document.documentElement.dataset.theme = theme;
 		localStorage.setItem(THEME_KEY, theme);
 	}, [theme]);
+
+	useEffect(() => {
+		// macOS draws the window controls over the app's top-left corner, so
+		// the app's own header has to start below them. Other platforms have
+		// a title bar of their own and need no room.
+		const mac = navigator.userAgent.includes("Mac");
+		document.documentElement.style.setProperty("--titlebar-height", mac ? "38px" : "0px");
+	}, []);
 
 	const handleEvent = useCallback((event: UiEvent) => {
 		dispatch({ type: "event", event });
@@ -63,6 +71,22 @@ export default function App() {
 		let cancelled = false;
 
 		void (async () => {
+			// Subscribe first: opening a project starts omp, and omp has
+			// things to say the moment it connects.
+			try {
+				const unlisten = await api.onUiEvent(handleEvent);
+				if (cancelled) {
+					unlisten();
+					return;
+				}
+				dispose = unlisten;
+			} catch (error) {
+				// Without the event stream the UI would sit there looking
+				// idle while the agent worked; say so instead.
+				setBanner(`The event stream failed: ${String(error)}`);
+				return;
+			}
+
 			try {
 				const projects = await api.listProjects();
 				if (!cancelled) {
@@ -76,12 +100,6 @@ export default function App() {
 			} catch (error) {
 				setBanner(String(error));
 			}
-			const unlisten = await api.onUiEvent(handleEvent);
-			if (cancelled) {
-				unlisten();
-				return;
-			}
-			dispose = unlisten;
 		})();
 
 		return () => {
@@ -96,11 +114,11 @@ export default function App() {
 	);
 
 	const addProject = useCallback(async () => {
-		const path = await api.pickFolder();
-		if (!path) {
-			return;
-		}
 		try {
+			const path = await api.pickFolder();
+			if (!path) {
+				return;
+			}
 			const project = await api.addProject(path);
 			dispatch({ type: "projects", projects: [...store.projects, project] });
 			await openProject(project.id);

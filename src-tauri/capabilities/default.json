@@ -1,0 +1,12 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "What the omp-ui window is allowed to do.",
+	"windows": ["main"],
+	"permissions": [
+		"core:default",
+		"dialog:allow-open",
+		"opener:allow-open-url",
+		"opener:allow-default-urls"
+	]
+}

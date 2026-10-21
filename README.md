@@ -81,6 +81,7 @@ session from disk.
 | `src-tauri/src/protocol.rs` | Translates omp's RPC frames into the UI's event vocabulary. |
 | `src-tauri/src/sessions.rs` | Finds the session files that belong to a project. |
 | `src-tauri/src/omp_bin.rs` | Finds the `omp` executable and builds a PATH that can run it. |
+| `src-tauri/capabilities/` | What the window is allowed to do: listen for events, open the folder picker, open a login link. |
 | `src/markdown.ts` | Markdown, syntax highlighting and sanitisation for replies. |
 | `src/commands.ts` | Matching for the composer's slash-command menu. |
 | `src/blocks.ts` | Folding runs of tool calls into one row. |

@@ -44,6 +44,8 @@
 
 	--radius: 10px;
 	--radius-sm: 6px;
+	/* Room for the window controls macOS draws over the app. */
+	--titlebar-height: 38px;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
 }
@@ -158,7 +160,7 @@ select {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 14px 14px 10px 16px;
+	padding: var(--titlebar-height) 14px 10px 16px;
 }
 
 .brand {
@@ -372,7 +374,7 @@ select {
 
 .header {
 	border-bottom: 1px solid var(--border-soft);
-	padding: 14px 24px 12px;
+	padding: var(--titlebar-height) 24px 12px;
 	background: var(--bg);
 }
 
