@@ -19,7 +19,7 @@ struct ComposerView: View {
             footer
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 16)
+        .padding(.bottom, 14)
     }
 
     // MARK: - The queue
@@ -59,11 +59,7 @@ struct ComposerView: View {
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                projectChip
-                modelChip
-            }
-            .padding(.horizontal, 3)
+            modelChip
 
             TextField("Pitch your idea", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -104,6 +100,19 @@ struct ComposerView: View {
 
                 Spacer(minLength: 0)
 
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.ground)
+                        .frame(width: 28, height: 28)
+                        .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.raised : Theme.accent, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help(busy ? "Queue this message" : "Send")
+
                 if busy {
                     Button {
                         Task { await store.abort() }
@@ -116,20 +125,9 @@ struct ComposerView: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .help("Stop the turn")
                 }
-
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.ground)
-                        .frame(width: 28, height: 28)
-                        .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.raised : Theme.accent, in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help(busy ? "Queue this message" : "Send")
             }
         }
         .padding(.horizontal, 10)
@@ -142,84 +140,44 @@ struct ComposerView: View {
         }
     }
 
-    private var projectChip: some View {
-        Menu {
-            ForEach(store.projects) { project in
-                Button {
-                    Task { await store.open(project.id) }
-                } label: {
-                    Text(project.name)
-                }
-            }
-            Divider()
-            Button("Add a project…") {
-                Task { await store.addProjectPicker() }
-            }
-        } label: {
-            chipLabel(icon: "folder", text: session?.project.name ?? "No project")
-        }
-    }
-
     private var modelChip: some View {
-        Menu {
-            ForEach(session?.modelList ?? []) { model in
-                Button {
-                    Task { await store.setModel(model) }
-                } label: {
-                    Text(model.name)
-                }
+        Select(
+            icon: "bolt",
+            items: (session?.modelList ?? []).map { model in
+                Select.Item(id: model.id, title: model.name, detail: model.provider)
+            },
+            selected: session?.model?.id,
+            placeholder: "No model"
+        ) { model in
+            if let found = session?.modelList.first(where: { $0.id == model.id }) {
+                Task { await store.setModel(found) }
             }
-        } label: {
-            chipLabel(icon: "bolt", text: session?.model?.name ?? "No model")
         }
     }
 
     private var modeChip: some View {
-        Menu {
-            ForEach(SessionMode.allCases, id: \.self) { mode in
-                Button {
-                    Task { await store.setMode(mode) }
-                } label: {
-                    Text("\(mode.label) — \(mode.hint)")
-                }
-            }
-        } label: {
-            chipLabel(icon: "bubble.left", text: session?.mode.label ?? "Interactive")
+        Select(
+            icon: "bubble.left",
+            items: SessionMode.allCases.map { mode in
+                Select.Item(id: mode.rawValue, title: mode.label, detail: mode.hint)
+            },
+            selected: session?.mode.rawValue,
+            placeholder: "Interactive"
+        ) { mode in
+            Task { await store.setMode(SessionMode(rawValue: mode.id) ?? .interactive) }
         }
     }
 
     private var thinkingChip: some View {
-        Menu {
-            ForEach(["off", "minimal", "low", "medium", "high", "xhigh", "max"], id: \.self) { level in
-                Button {
-                    Task { await store.setThinking(level) }
-                } label: {
-                    Text(level.capitalized)
-                }
-            }
-        } label: {
-            chipLabel(icon: "brain", text: (session?.thinkingLevel ?? "off").capitalized)
-        }
-    }
-
-    private func chipLabel(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 10.5))
-            Text(text)
-                .font(Theme.body(12))
-                .lineLimit(1)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Theme.inkFaint)
-        }
-        .foregroundStyle(Theme.inkDim)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(Theme.hairline, lineWidth: 1)
+        Select(
+            icon: "brain",
+            items: ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map { level in
+                Select.Item(id: level, title: level.capitalized)
+            },
+            selected: session?.thinkingLevel,
+            placeholder: "Off"
+        ) { level in
+            Task { await store.setThinking(level.id) }
         }
     }
 
@@ -227,41 +185,21 @@ struct ComposerView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
-            HStack(spacing: 6) {
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 11))
-                Text(session?.mode.label ?? "Interactive")
-                    .font(Theme.body(11.5))
-            }
-            .foregroundStyle(Theme.inkDim)
-
             if let approval = store.approvalLabel {
                 Text(approval)
                     .font(Theme.body(11.5))
                     .foregroundStyle(Theme.inkFaint)
             }
-
             Spacer(minLength: 0)
 
-            if let session {
+            if let branch = session?.branch {
                 HStack(spacing: 6) {
-                    Image(systemName: "folder")
+                    Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 10.5))
-                    Text(session.project.name)
+                    Text(branch)
                         .font(Theme.body(11.5))
-                        .lineLimit(1)
                 }
                 .foregroundStyle(Theme.inkFaint)
-
-                if let branch = session.branch {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 10.5))
-                        Text(branch)
-                            .font(Theme.body(11.5))
-                    }
-                    .foregroundStyle(Theme.inkFaint)
-                }
             }
         }
         .frame(maxWidth: Theme.contentWidth)
