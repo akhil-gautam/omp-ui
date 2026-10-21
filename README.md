@@ -37,6 +37,13 @@ npm run tauri dev      # development, with hot reload
 npm run tauri build    # a .app / .dmg in src-tauri/target/release/bundle
 ```
 
+A release build that is signed ad-hoc — which is what macOS needs before it
+will open the app without a Gatekeeper prompt — is built with:
+
+```sh
+APPLE_SIGNING_IDENTITY="-" npm run tauri build
+```
+
 Or install the release:
 
 ```sh
