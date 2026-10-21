@@ -8,7 +8,7 @@ struct TranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     if let session = store.active {
                         if session.blocks.isEmpty {
                             GreetingView(store: store)

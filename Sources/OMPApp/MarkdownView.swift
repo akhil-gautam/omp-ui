@@ -7,7 +7,7 @@ struct MarkdownView: View {
     let source: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             ForEach(Markdown.blocks(of: source)) { block in
                 switch block {
                 case .heading(_, let level, let text):

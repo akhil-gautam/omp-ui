@@ -36,6 +36,7 @@ struct Select: View {
     let onSelect: (Item) -> Void
 
     @State private var open = false
+
     @State private var query = ""
 
     /// A list longer than this is worth searching.
@@ -107,7 +108,9 @@ struct Select: View {
             }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 1) {
+                // The list can hold hundreds of models, so the rows are made
+                // as they are scrolled to rather than all at once.
+                LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(filtered) { item in
                         Button {
                             onSelect(item)
@@ -159,7 +162,42 @@ struct Select: View {
             .frame(maxHeight: 320)
         }
         .background(palette.panel)
+        .background(PopoverBackground(colour: palette.panel))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.45), radius: 26, y: 10)
+    }
+}
+
+/// The popover's arrow is drawn by the system in the colour of the window it
+/// belongs to, so the window is told what the panel's colour is.
+private struct PopoverBackground: NSViewRepresentable {
+    let colour: Color
+
+    func makeNSView(context: Context) -> NSView {
+        let view = Observer()
+        view.colour = NSColor(colour)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let observer = nsView as? Observer else { return }
+        observer.colour = NSColor(colour)
+        observer.apply()
+    }
+
+    /// A view that knows when it has been put in a window.
+    final class Observer: NSView {
+        var colour: NSColor?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+        }
+
+        func apply() {
+            guard let colour else { return }
+            window?.backgroundColor = colour
+            window?.isOpaque = false
+        }
     }
 }
