@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { SessionState, UiEvent } from "./schema";
 import { initialStore, reducer, type Store } from "./store";
 
-const project = { id: "p1", path: "/tmp/example", name: "example", createdAt: 0 };
+const project = {
+	id: "p1",
+	path: "/tmp/example",
+	displayPath: "/tmp/example",
+	name: "example",
+	createdAt: 0,
+};
 
 const state: SessionState = {
 	sessionId: "s1",

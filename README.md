@@ -46,19 +46,24 @@ sessions on disk, the most recent one is resumed.
 - **Projects.** Each project runs its own omp process, concurrently. The
   sidebar shows every project's live state. The project you were last using is
   reopened on the next launch.
-- **Transcripts.** Assistant text, thinking, tool calls with their arguments
-  and output, and the user's own messages. Tool calls are cards that expand
-  into the exact arguments and result omp saw.
+- **Transcripts.** Replies are rendered as markdown: headings, lists, tables,
+  task lists, links, and fenced code with syntax highlighting and a copy
+  button. Thinking is folded away; runs of tool calls collapse into one row
+  that expands into the exact arguments and results omp saw.
 - **Composer.** Enter sends, Shift+Enter adds a line. While a turn is running
   Enter queues a follow-up and ⌘Enter steers into the running turn; **Stop**
-  aborts it.
+  aborts it. Typing `/` offers omp's own command catalogue, with each
+  command's arguments and where it comes from.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt, a login link — the request appears as a modal and omp
   waits for your answer.
-- **Controls.** Model, thinking level, `/compact`, a new session, and a
-  picker for the project's previous sessions.
-- **Live state.** Context usage, message count, tokens per second, queued
-  messages, and subagent activity.
+- **Controls.** A searchable model picker, thinking level, `/compact`, a new
+  session, and a picker for the project's previous sessions.
+- **Live state.** The plan omp is working through, context usage, message
+  count, tokens per second, queued messages, and subagent activity.
+- **Keyboard.** ⌘K focuses the composer, ⌘N adds a project, ⌘1…⌘9 switch
+  between projects.
+- **Themes.** Follows the system appearance, with a toggle in the sidebar.
 
 ## Memory
 
@@ -76,8 +81,12 @@ session from disk.
 | `src-tauri/src/protocol.rs` | Translates omp's RPC frames into the UI's event vocabulary. |
 | `src-tauri/src/sessions.rs` | Finds the session files that belong to a project. |
 | `src-tauri/src/omp_bin.rs` | Finds the `omp` executable and builds a PATH that can run it. |
+| `src/markdown.ts` | Markdown, syntax highlighting and sanitisation for replies. |
+| `src/commands.ts` | Matching for the composer's slash-command menu. |
+| `src/blocks.ts` | Folding runs of tool calls into one row. |
 | `src/schema.ts` | The contract between the backend and the webview, as Zod schemas. |
 | `src/store.ts` | The reducer that keeps the UI in sync with omp's events. |
+| `src/components/` | The webview: transcript, composer, pickers, dialogs. |
 | `scripts/make-icon.py` | Draws the source app icon. |
 | `scripts/sync-vendor.sh` | Refreshes the vendored `omp-rpc`. |
 | `vendor/omp-rpc` | The official Rust client for omp's RPC protocol (vendored). |
@@ -109,13 +118,14 @@ Two small changes were made to it for Rust 1.87; see
 ## Tests
 
 ```sh
-npm test                   # the webview's reducer
+npm test                   # the webview: reducer, markdown, dialogs, commands
 cargo test                 # spawns a real omp; no model credentials needed
 cargo test -- --ignored    # additionally sends a prompt and checks the reply
 ```
 
 The Rust tests start real omp processes and check that projects open, that
-each gets its own session, that two projects can run at once, and that the
-project list round-trips. The ignored test needs a working model and network.
-The webview tests cover the reducer that turns omp's events into the
-transcript.
+each gets its own session, that two projects can run at once, that stopping a
+project ends its omp, and that the project list round-trips. The ignored test
+needs a working model and network. The webview tests cover the reducer that
+turns omp's events into the transcript, the markdown pipeline, the slash
+command menu, and the dialogs.

@@ -17,7 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use omp_rpc::wire::{
 	AbortCommand, AnswersUiResponse, CancelUiResponse, CompactCommand, ConfirmUiResponse,
 	ExtensionUiResponse, GetAvailableCommandsCommand, GetAvailableModelsCommand, GetStateCommand,
-	NewSessionCommand, PromptCommand, RpcInbound, SessionState, SetModelCommand,
+	NewSessionCommand, PromptCommand, RpcInbound, SessionState, SetAskDialogCommand, SetModelCommand,
 	SetThinkingLevelCommand, StreamingBehavior, SwitchSessionCommand, ThinkingLevel, ValueUiResponse,
 };
 use omp_rpc::{Client, ClientOptions, Event};
@@ -107,7 +107,13 @@ impl Manager {
 			.file_name()
 			.map(|name| name.to_string_lossy().into_owned())
 			.unwrap_or_else(|| path.clone());
-		let project = Project { id: new_id(), path, name, created_at: now_secs() };
+		let project = Project {
+			id: new_id(),
+			display_path: omp_bin::display_path(&path),
+			path,
+			name,
+			created_at: now_secs(),
+		};
 
 		{
 			let mut projects =
@@ -165,17 +171,7 @@ impl Manager {
 		let blocks = client.get_messages().map(|messages| protocol::history_blocks(&messages)).unwrap_or_default();
 		let commands = client
 			.call(&GetAvailableCommandsCommand {})
-			.map(|commands| {
-				commands
-					.iter()
-					.map(|command| CommandInfo {
-						name: command.name.clone(),
-						source: protocol::as_string(&command.source),
-						description: command.description.clone(),
-						aliases: command.aliases.clone(),
-					})
-					.collect()
-			})
+			.map(|commands| commands.iter().map(protocol::command_info).collect())
 			.unwrap_or_default();
 
 		Ok(OpenResult {
@@ -342,6 +338,9 @@ impl Manager {
 			.lock()
 			.map_err(|_| "the workspace registry is poisoned".to_owned())?
 			.insert(project.id.clone(), client.clone());
+
+		// Let the `ask` tool reach the UI instead of falling back to a prompt.
+		let _ = client.call(&SetAskDialogCommand { enabled: true });
 
 		self.pump(project.id.clone(), events);
 		Ok(())

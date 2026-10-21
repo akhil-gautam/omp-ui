@@ -4,14 +4,16 @@
 //! sends is normalised here so that upstream protocol changes never reach the
 //! frontend.
 
-use omp_rpc::wire::{AgentMessage, AssistantMessageEvent, RpcAgentEvent, RpcNotification};
+use omp_rpc::wire::{
+	AgentMessage, AssistantMessageEvent, AvailableSlashCommand, RpcAgentEvent, RpcNotification,
+};
 use omp_rpc::Event;
 use serde_json::{json, Value};
 
 use crate::types::{
-	AgentEndPayload, Block, CommandInfo, DeltaChannel, EventKind, MessageDeltaPayload,
-	MessageEndPayload, MessageStartPayload, NoticePayload, PromptResultPayload, QueuePayload,
-	SessionStatus, StatusPayload, ToolEndPayload, ToolStartPayload, UiEvent,
+	AgentEndPayload, Block, CommandInfo, CommandInput, CommandSubcommand, DeltaChannel, EventKind,
+	MessageDeltaPayload, MessageEndPayload, MessageStartPayload, NoticePayload, PromptResultPayload,
+	QueuePayload, SessionStatus, StatusPayload, ToolEndPayload, ToolStartPayload, UiEvent,
 };
 
 /// A status event for one project.
@@ -62,16 +64,7 @@ fn from_notification(project_id: &str, notification: RpcNotification) -> Option<
 			project_id: project_id.to_owned(),
 			kind: EventKind::Commands,
 			payload: json!({
-				"commands": update
-					.commands
-					.iter()
-					.map(|command| CommandInfo {
-						name: command.name.clone(),
-						source: as_string(&command.source),
-						description: command.description.clone(),
-						aliases: command.aliases.clone(),
-					})
-					.collect::<Vec<_>>(),
+				"commands": update.commands.iter().map(command_info).collect::<Vec<_>>(),
 			}),
 		}),
 		RpcNotification::SubagentLifecycle(event) => Some(UiEvent {
@@ -90,6 +83,30 @@ pub fn as_string<T: serde::Serialize>(value: &T) -> String {
 		.ok()
 		.and_then(|value| value.as_str().map(str::to_owned))
 		.unwrap_or_default()
+}
+
+/// Normalises a slash command for the webview.
+pub fn command_info(command: &AvailableSlashCommand) -> CommandInfo {
+	CommandInfo {
+		name: command.name.clone(),
+		source: as_string(&command.source),
+		description: command.description.clone(),
+		aliases: command.aliases.clone(),
+		input: command
+			.input
+			.as_ref()
+			.map(|input| CommandInput { hint: input.hint.clone() }),
+		subcommands: command.subcommands.as_ref().map(|subcommands| {
+			subcommands
+				.iter()
+				.map(|subcommand| CommandSubcommand {
+					name: subcommand.name.clone(),
+					description: subcommand.description.clone(),
+					usage: subcommand.usage.clone(),
+				})
+				.collect()
+		}),
+	}
 }
 
 fn from_agent_event(project_id: &str, event: &RpcAgentEvent) -> Option<UiEvent> {

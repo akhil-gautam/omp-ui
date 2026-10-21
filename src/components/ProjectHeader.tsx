@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import * as api from "../api";
 import type { ModelListEntry, SessionSummary } from "../schema";
 import type { Workspace } from "../store";
+import Picker from "./Picker";
+import TodoPanel from "./TodoPanel";
 
 type Props = {
 	workspace: Workspace;
@@ -31,8 +33,33 @@ export default function ProjectHeader({ workspace, onError }: Props) {
 		};
 	}, [project.id, onError]);
 
+	const modelOptions = useMemo(
+		() =>
+			models.map((model) => ({
+				value: model.id,
+				label: model.name ?? model.id,
+				hint: model.contextWindow ? `${Math.round(model.contextWindow / 1000)}k` : undefined,
+			})),
+		[models],
+	);
+
+	const thinkingOptions = useMemo(
+		() => THINKING_LEVELS.map((level) => ({ value: level, label: level })),
+		[],
+	);
+
 	const currentModel = state?.model?.id ?? "";
 	const context = state?.contextUsage;
+
+	const pickModel = (id: string) => {
+		const picked = models.find((model) => model.id === id);
+		if (!picked) {
+			return;
+		}
+		void api
+			.setModel(project.id, picked.provider ?? "", picked.id)
+			.catch((error: unknown) => onError(String(error)));
+	};
 
 	return (
 		<header className="header">
@@ -45,45 +72,21 @@ export default function ProjectHeader({ workspace, onError }: Props) {
 				</div>
 
 				<div className="header-actions">
-					<select
-						className="select"
+					<Picker
 						value={currentModel}
-						onChange={(event) => {
-							const picked = models.find((model) => model.id === event.target.value);
-							if (!picked) {
-								return;
-							}
-							void api
-								.setModel(project.id, picked.provider ?? "", picked.id)
-								.catch((error: unknown) => onError(String(error)));
-						}}
-					>
-						{models.length === 0 ? (
-							<option value={currentModel}>{currentModel || "no model"}</option>
-						) : null}
-						{models.map((model) => (
-							<option key={model.id} value={model.id}>
-								{model.name ?? model.id}
-							</option>
-						))}
-					</select>
-
-					<select
-						className="select"
+						options={modelOptions}
+						onSelect={pickModel}
+						fallback="no model"
+					/>
+					<Picker
 						value={state?.thinkingLevel ?? "off"}
-						onChange={(event) =>
+						options={thinkingOptions}
+						onSelect={(level) =>
 							void api
-								.setThinking(project.id, event.target.value)
+								.setThinking(project.id, level)
 								.catch((error: unknown) => onError(String(error)))
 						}
-					>
-						{THINKING_LEVELS.map((level) => (
-							<option key={level} value={level}>
-								{level}
-							</option>
-						))}
-					</select>
-
+					/>
 					<button
 						className="ghost"
 						onClick={() =>
@@ -127,11 +130,13 @@ export default function ProjectHeader({ workspace, onError }: Props) {
 				</div>
 			</div>
 
+			<TodoPanel phases={state?.todoPhases ?? []} />
+
 			{context ? (
 				<div className="context" title={`${context.tokens} of ${context.contextWindow} tokens`}>
 					<div className="context-track">
 						<div
-							className="context-fill"
+							className={`context-fill ${context.percent > 1 ? "over" : ""}`}
 							style={{ width: `${Math.min(100, Math.round(context.percent * 100))}%` }}
 						/>
 					</div>

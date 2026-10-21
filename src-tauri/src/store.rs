@@ -38,9 +38,16 @@ impl ProjectStore {
 		let Ok(text) = fs::read_to_string(&self.path) else {
 			return StoredProjects::default();
 		};
-		serde_json::from_str::<StoreFile>(&text)
+		let mut stored = serde_json::from_str::<StoreFile>(&text)
 			.map(|file| StoredProjects { projects: file.projects, active_id: file.active_id })
-			.unwrap_or_default()
+			.unwrap_or_default();
+		// Projects saved before the display path existed get one now.
+		for project in &mut stored.projects {
+			if project.display_path.is_empty() {
+				project.display_path = crate::omp_bin::display_path(&project.path);
+			}
+		}
+		stored
 	}
 
 	pub fn save(&self, projects: &[Project], active_id: Option<&str>) -> Result<(), String> {

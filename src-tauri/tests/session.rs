@@ -61,6 +61,7 @@ fn the_store_round_trips_the_active_project() {
 	let project = Project {
 		id: "p1".to_owned(),
 		path: "/tmp/example".to_owned(),
+		display_path: "/tmp/example".to_owned(),
 		name: "example".to_owned(),
 		created_at: 0,
 	};
@@ -70,6 +71,22 @@ fn the_store_round_trips_the_active_project() {
 	assert_eq!(loaded.projects.len(), 1, "the project should survive the round trip");
 	assert_eq!(loaded.projects[0].id, "p1");
 	assert_eq!(loaded.active_id.as_deref(), Some("p1"), "the active project should survive the round trip");
+}
+
+#[test]
+fn projects_saved_without_a_display_path_get_one() {
+	let temp = tempfile::tempdir().expect("a temp dir");
+	let path = temp.path().join("projects.json");
+	// A store written before the display path existed.
+	std::fs::write(
+		&path,
+		r#"{"projects":[{"id":"p1","path":"/tmp/example","name":"example","createdAt":0}]}"#,
+	)
+	.expect("the file is written");
+
+	let loaded = ProjectStore::new(path).load();
+	assert_eq!(loaded.projects.len(), 1);
+	assert_eq!(loaded.projects[0].display_path, "/tmp/example");
 }
 
 #[test]

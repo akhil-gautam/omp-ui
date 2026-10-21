@@ -60,6 +60,21 @@ pub fn home_dir() -> Option<PathBuf> {
 	env::var_os("HOME").filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
+/// A path with the home directory written as `~`.
+pub fn display_path(path: &str) -> String {
+	let Some(home) = home_dir() else {
+		return path.to_owned();
+	};
+	let home = home.to_string_lossy().into_owned();
+	if path == home {
+		return "~".to_owned();
+	}
+	match path.strip_prefix(&format!("{home}/")) {
+		Some(rest) => format!("~/{rest}"),
+		None => path.to_owned(),
+	}
+}
+
 /// PATH for the omp child process.
 ///
 /// `omp` ships as a `#!/usr/bin/env bun` script, so the directory holding

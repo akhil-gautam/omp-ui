@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import * as api from "./api";
 import { sessionStateSchema, type UiEvent } from "./schema";
@@ -9,9 +10,28 @@ import Sidebar from "./components/Sidebar";
 import Transcript from "./components/Transcript";
 import UiDialog from "./components/UiDialog";
 
+type Theme = "dark" | "light";
+
+const THEME_KEY = "omp-ui.theme";
+
 export default function App() {
 	const [store, dispatch] = useReducer(reducer, initialStore);
 	const [banner, setBanner] = useState<string | null>(null);
+	const [theme, setTheme] = useState<Theme>(() => {
+		const stored = localStorage.getItem(THEME_KEY);
+		if (stored === "light" || stored === "dark") {
+			return stored;
+		}
+		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	});
+	const composer = useRef<HTMLTextAreaElement>(null);
+	const [suggestion, setSuggestion] = useState<string | null>(null);
+	const onSuggestionApplied = useCallback(() => setSuggestion(null), []);
+
+	useEffect(() => {
+		document.documentElement.dataset.theme = theme;
+		localStorage.setItem(THEME_KEY, theme);
+	}, [theme]);
 
 	const handleEvent = useCallback((event: UiEvent) => {
 		dispatch({ type: "event", event });
@@ -76,6 +96,20 @@ export default function App() {
 		[store.activeId, store.workspaces],
 	);
 
+	useEffect(() => {
+		if (!active) {
+			return;
+		}
+		// A title is cosmetic; it must never take the app down with it.
+		try {
+			void getCurrentWindow()
+				.setTitle(active.project.name)
+				.catch(() => undefined);
+		} catch {
+			// No window to title.
+		}
+	}, [active]);
+
 	const addProject = useCallback(async () => {
 		const path = await api.pickFolder();
 		if (!path) {
@@ -129,12 +163,41 @@ export default function App() {
 		[active],
 	);
 
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || event.altKey) {
+				return;
+			}
+			const key = event.key.toLowerCase();
+			if (key === "k" || key === "/") {
+				event.preventDefault();
+				composer.current?.focus();
+				return;
+			}
+			if (key === "n") {
+				event.preventDefault();
+				void addProject();
+				return;
+			}
+			const index = Number(key) - 1;
+			const project = store.projects[index];
+			if (project) {
+				event.preventDefault();
+				void openProject(project.id);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [addProject, openProject, store.projects]);
+
 	return (
 		<div className="app">
 			<Sidebar
 				projects={store.projects}
 				workspaces={store.workspaces}
 				activeId={store.activeId}
+				theme={theme}
+				onToggleTheme={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
 				onSelect={(id) => void openProject(id)}
 				onAdd={() => void addProject()}
 				onRemove={(id) => void removeProject(id)}
@@ -144,10 +207,13 @@ export default function App() {
 				{active ? (
 					<>
 						<ProjectHeader workspace={active} onError={setBanner} />
-						<Transcript blocks={active.blocks} />
+						<Transcript blocks={active.blocks} onSuggest={setSuggestion} />
 						<Composer
 							workspace={active}
-							onSend={(text) => void send(text)}
+							inputRef={composer}
+							suggestion={suggestion}
+							onSuggestionApplied={onSuggestionApplied}
+							onSend={(text, behavior) => void send(text, behavior)}
 							onAbort={() =>
 								void api
 									.abortTurn(active.project.id)

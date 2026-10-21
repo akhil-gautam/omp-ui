@@ -10,6 +10,8 @@ import { z } from "zod";
 export const projectSchema = z.object({
 	id: z.string(),
 	path: z.string(),
+	/** The path with the home directory written as `~`. */
+	displayPath: z.string().default(""),
 	name: z.string(),
 	createdAt: z.number(),
 });
@@ -23,6 +25,11 @@ export const commandSchema = z.object({
 	source: z.string(),
 	description: z.string().optional(),
 	aliases: z.array(z.string()).optional(),
+	/** The argument the command takes, when it takes one. */
+	input: z.object({ hint: z.string().optional() }).optional(),
+	subcommands: z
+		.array(z.object({ name: z.string(), description: z.string().optional(), usage: z.string().optional() }))
+		.optional(),
 });
 export type CommandInfo = z.infer<typeof commandSchema>;
 
@@ -91,6 +98,9 @@ export const blockSchema = z.discriminatedUnion("kind", [
 	}),
 ]);
 export type Block = z.infer<typeof blockSchema>;
+
+/** A tool call and its result. */
+export type ToolBlock = Extract<Block, { kind: "tool" }>;
 
 export const askQuestionSchema = z.object({
 	id: z.string(),

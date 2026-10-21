@@ -16,6 +16,9 @@ pub struct Project {
 	pub id: String,
 	/// Absolute path of the project directory.
 	pub path: String,
+	/// The path with the home directory written as `~`.
+	#[serde(default)]
+	pub display_path: String,
 	/// Display name; defaults to the directory name.
 	pub name: String,
 	pub created_at: u64,
@@ -188,6 +191,28 @@ pub struct CommandInfo {
 	pub description: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub aliases: Option<Vec<String>>,
+	/// The argument the command takes, when it takes one.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub input: Option<CommandInput>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub subcommands: Option<Vec<CommandSubcommand>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandInput {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandSubcommand {
+	pub name: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub usage: Option<String>,
 }
 
 /// A normalised transcript entry.
