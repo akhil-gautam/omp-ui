@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import * as api from "./api";
 import { sessionStateSchema, type UiEvent } from "./schema";
@@ -95,20 +94,6 @@ export default function App() {
 		() => (store.activeId ? store.workspaces[store.activeId] : undefined),
 		[store.activeId, store.workspaces],
 	);
-
-	useEffect(() => {
-		if (!active) {
-			return;
-		}
-		// A title is cosmetic; it must never take the app down with it.
-		try {
-			void getCurrentWindow()
-				.setTitle(active.project.name)
-				.catch(() => undefined);
-		} catch {
-			// No window to title.
-		}
-	}, [active]);
 
 	const addProject = useCallback(async () => {
 		const path = await api.pickFolder();

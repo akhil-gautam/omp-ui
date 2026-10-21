@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use omp_ui_lib::manager::{EventSink, Manager};
+use omp_ui_lib::manager::{Host, Manager};
 use omp_ui_lib::store::ProjectStore;
 use omp_ui_lib::types::{Block, EventKind, Project, SessionStatus, UiEvent};
 
@@ -18,10 +18,12 @@ struct Collector {
 	events: Arc<Mutex<Vec<UiEvent>>>,
 }
 
-impl EventSink for Collector {
+impl Host for Collector {
 	fn emit(&self, event: UiEvent) {
 		self.events.lock().expect("the collector is not poisoned").push(event);
 	}
+
+	fn set_title(&self, _title: &str) {}
 }
 
 impl Collector {

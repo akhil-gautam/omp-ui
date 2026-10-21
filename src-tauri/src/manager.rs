@@ -23,12 +23,18 @@ use omp_rpc::wire::{
 use omp_rpc::{Client, ClientOptions, Event};
 use serde::Serialize;
 use serde_json::Value;
+// Imported for its methods only: `tauri::Manager` would clash with the
+// application state type of the same name.
+use tauri::Manager as _;
 
 use crate::omp_bin;
 use crate::protocol;
 use crate::sessions::{self, SessionSummary};
 use crate::store::ProjectStore;
 use crate::types::{Block, CommandInfo, EventKind, Project, SessionStatus, UiAnswer, UiEvent};
+
+/// The label of the app's only window.
+const MAIN_WINDOW: &str = "main";
 
 /// Everything the webview needs to render a freshly opened project.
 #[derive(Debug, Serialize)]
@@ -40,23 +46,35 @@ pub struct OpenResult {
 	pub commands: Vec<CommandInfo>,
 }
 
-/// Where the backend pushes its events.
+/// What the backend needs from the app it runs in.
 ///
-/// The app uses the Tauri event system; tests collect the same events
-/// without a window.
-pub trait EventSink: Send + Sync + 'static {
+/// The app implements this with its Tauri handle; tests implement it with a
+/// collector and no window.
+pub trait Host: Send + Sync + 'static {
+	/// Pushes an event to the webview.
 	fn emit(&self, event: UiEvent);
+	/// Shows a title in the app's window.
+	fn set_title(&self, title: &str);
 }
 
-impl<R: tauri::Runtime> EventSink for tauri::AppHandle<R> {
+impl<R: tauri::Runtime> Host for tauri::AppHandle<R> {
 	fn emit(&self, event: UiEvent) {
 		let _ = tauri::Emitter::emit(self, "omp://event", event);
+	}
+
+	fn set_title(&self, title: &str) {
+		let Some(window) = self.get_webview_window(MAIN_WINDOW) else {
+			return;
+		};
+		if let Err(error) = window.set_title(title) {
+			eprintln!("[omp-ui] could not set the window title: {error}");
+		}
 	}
 }
 
 /// The registry of projects and their live omp processes.
 pub struct Manager {
-	sink: Arc<dyn EventSink>,
+	host: Arc<dyn Host>,
 	store: ProjectStore,
 	projects: Mutex<Vec<Project>>,
 	/// The project that was open when the app last closed.
@@ -65,10 +83,10 @@ pub struct Manager {
 }
 
 impl Manager {
-	pub fn new(sink: Arc<dyn EventSink>, store: ProjectStore) -> Self {
+	pub fn new(host: Arc<dyn Host>, store: ProjectStore) -> Self {
 		let stored = store.load();
 		Self {
-			sink,
+			host,
 			store,
 			projects: Mutex::new(stored.projects),
 			active_id: Mutex::new(stored.active_id),
@@ -158,10 +176,11 @@ impl Manager {
 	/// the state the webview needs to render it.
 	pub fn open(&self, id: &str) -> Result<OpenResult, String> {
 		self.set_active(Some(id))?;
+		self.set_window_title(id);
 		if self.client(id).is_err() {
 			let project = self.project(id)?;
 			if let Err(error) = self.start(&project) {
-				self.sink.emit(protocol::status(id, SessionStatus::Error, Some(error.clone())));
+				self.host.emit(protocol::status(id, SessionStatus::Error, Some(error.clone())));
 				return Err(error);
 			}
 		}
@@ -301,6 +320,13 @@ impl Manager {
 		self.client(id).ok().and_then(|client| client.pid())
 	}
 
+	/// Shows the open project in the window title.
+	fn set_window_title(&self, id: &str) {
+		if let Ok(project) = self.project(id) {
+			self.host.set_title(&project.name);
+		}
+	}
+
 	fn project(&self, id: &str) -> Result<Project, String> {
 		self.projects
 			.lock()
@@ -322,7 +348,7 @@ impl Manager {
 
 	/// Spawns omp for a project and wires up its event pump.
 	fn start(&self, project: &Project) -> Result<(), String> {
-		self.sink.emit(protocol::status(&project.id, SessionStatus::Starting, None));
+		self.host.emit(protocol::status(&project.id, SessionStatus::Starting, None));
 		let omp = omp_bin::resolve()?;
 		let resume = sessions::for_cwd(Path::new(&project.path)).first().map(|session| session.path.clone());
 
@@ -382,7 +408,7 @@ impl Manager {
 	/// client's last `Arc` is what tears the omp process down, and the frame
 	/// channel closes once the server is gone.
 	fn pump(&self, project_id: String, events: Receiver<Event>) {
-		let sink = Arc::clone(&self.sink);
+		let host = Arc::clone(&self.host);
 		thread::spawn(move || {
 			while let Ok(event) = events.recv() {
 				let Some(ui) = protocol::from_event(&project_id, event) else {
@@ -393,12 +419,12 @@ impl Manager {
 					EventKind::AgentEnd => Some(SessionStatus::Idle),
 					_ => None,
 				};
-				sink.emit(ui);
+				host.emit(ui);
 				if let Some(status) = status {
-					sink.emit(protocol::status(&project_id, status, None));
+					host.emit(protocol::status(&project_id, status, None));
 				}
 			}
-			sink.emit(protocol::status(&project_id, SessionStatus::Stopped, None));
+			host.emit(protocol::status(&project_id, SessionStatus::Stopped, None));
 		});
 	}
 }
