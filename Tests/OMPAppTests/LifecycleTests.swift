@@ -6,10 +6,13 @@ import OMPCore
 /// A stand-in for omp that answers every command, on disk as an executable.
 /// A prompt is refused the way OpenRouter refuses one without credits: the
 /// turn ends with the reason, and the failed reply stays out of the history.
+/// Like omp, it echoes the message it was sent, settles a slash command
+/// itself, and ends each prompt it ran with a `prompt_result`; a message
+/// saying "slow" waits a second before its turn starts.
 private func makeFakeOMP(in directory: URL) throws -> URL {
     let script = """
     #!/usr/bin/python3
-    import json, sys
+    import json, sys, time
     def say(frame):
         print(json.dumps(frame), flush=True)
     say({"type": "ready", "protocolVersion": 1, "supportedProtocolVersions": [1, 2], "maxFrameBytes": 1048576})
@@ -20,18 +23,27 @@ private func makeFakeOMP(in directory: URL) throws -> URL {
         except Exception:
             continue
         kind = message.get("type")
+        text = message.get("message", "")
+        local = kind == "prompt" and text.startswith("/")
         data = {}
         if kind == "negotiate_protocol":
             data = {"protocolVersion": 2}
         elif kind == "get_messages":
             data = {"messages": messages}
+        elif kind == "prompt":
+            data = {"agentInvoked": not local}
         say({"id": message.get("id"), "type": "response", "command": kind, "success": True, "data": data})
-        if kind == "prompt":
-            user = {"role": "user", "content": message.get("message", "")}
+        if kind == "prompt" and not local:
+            user = {"role": "user", "content": text}
             messages.append(user)
+            say({"type": "message_start", "messageId": "u%d" % len(messages), "message": user})
+            if "slow" in text:
+                time.sleep(1)
             failed = {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "402 This request requires more credits"}
             say({"type": "agent_start"})
             say({"type": "agent_end", "messages": [user, failed]})
+            say({"type": "prompt_result", "id": message.get("id"), "agentInvoked": True, "status": "error",
+                 "error": {"message": "402 This request requires more credits", "retryable": False}, "sessionSettled": True})
     """
     let url = directory.appendingPathComponent("omp")
     try script.write(to: url, atomically: true, encoding: .utf8)
@@ -115,6 +127,40 @@ struct LifecycleTests {
         // It follows the message it answered.
         let ids = session.blocks.map(\.id)
         #expect(ids.last?.hasPrefix("failure-") == true)
+        await store.close(session.project.id)
+    }
+
+    @Test("a sent message is shown once, and the turn is working until it ends")
+    func sendingShowsOnceAndWorks() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        await store.send("a slow question")
+        // omp has taken the message but has not started the turn yet.
+        #expect(session.isWorking)
+        #expect(session.status != .busy)
+        // omp's echo takes over the copy shown the moment it was sent.
+        for _ in 0..<20 where !session.blocks.contains(where: { $0.id == "u1" }) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(session.blocks.contains { $0.id == "u1" })
+        #expect(session.blocks.filter { $0.text == "a slow question" }.count == 1)
+        #expect(session.isWorking)
+
+        for _ in 0..<60 where session.isWorking {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!session.isWorking)
+        await store.close(session.project.id)
+    }
+
+    @Test("a command omp settles itself ends the wait at once")
+    func aLocalCommandEndsTheWait() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        await store.send("/model")
+        #expect(!session.isWorking)
         await store.close(session.project.id)
     }
 }

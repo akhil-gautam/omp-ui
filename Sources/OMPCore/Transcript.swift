@@ -64,4 +64,29 @@ public struct Transcript: Sendable {
             }
         }
     }
+
+    /// The id prefix of a message the app shows before omp has echoed it.
+    public static let shownPrefix = "local-"
+
+    /// Puts omp's echo of a user message into the transcript.
+    ///
+    /// The app shows a message the moment it is sent, so the echo takes over
+    /// that copy instead of adding a second one: the shown copy with the same
+    /// text, or else the oldest one still waiting, since omp can return a
+    /// message changed — a slash command comes back expanded. Messages are
+    /// echoed in the order they were sent.
+    public static func receive(userMessage id: String, text: String, into blocks: inout [Block]) {
+        guard !blocks.contains(where: { $0.id == id }) else { return }
+        let waiting = blocks.indices.filter { index in
+            if case .user(let blockID, _) = blocks[index] { return blockID.hasPrefix(shownPrefix) }
+            return false
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let match = waiting.first { blocks[$0].text == trimmed } ?? waiting.first
+        if let match {
+            blocks[match] = .user(id: id, text: text)
+        } else {
+            blocks.append(.user(id: id, text: text))
+        }
+    }
 }

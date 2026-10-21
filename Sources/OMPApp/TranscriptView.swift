@@ -20,6 +20,9 @@ struct TranscriptView: View {
                         }
                         if let request = session.pendingRequest {
                             DialogView(request: request, store: store)
+                        } else if let since = session.turnStarted {
+                            WorkingRow(activity: WorkingRow.activity(of: session), since: since)
+                                .id("working")
                         }
                     } else {
                         GreetingView(store: store)
@@ -40,6 +43,49 @@ struct TranscriptView: View {
                 }
             }
         }
+    }
+}
+
+/// The sign that a turn is under way, from the moment a message is sent until
+/// the turn ends, saying what omp is doing and for how long.
+struct WorkingRow: View {
+    @Environment(\.palette) private var palette
+    let activity: String
+    let since: Date
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.75)
+                .frame(width: 14, height: 14)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text("\(activity)  ·  \(WorkingRow.elapsed(from: since, to: context.date))")
+                    .font(Theme.body(12.5))
+                    .foregroundStyle(palette.inkDim)
+                    .monospacedDigit()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("omp is working on your message")
+    }
+
+    /// What omp is doing, read from where the turn has got to.
+    static func activity(of session: ProjectSession) -> String {
+        guard session.isBusy else {
+            return session.status == .starting ? "Starting omp" : "Sending"
+        }
+        switch session.blocks.last {
+        case .tool(_, let name, _, _, _, true): return "Running \(ToolCallView.title(of: name))"
+        case .thinking: return "Thinking"
+        case .text: return "Writing"
+        default: return "Working"
+        }
+    }
+
+    static func elapsed(from start: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s"
     }
 }
 
@@ -174,7 +220,9 @@ struct ToolCallView: View {
     }
 
     /// The kind of call, in the title's voice.
-    private var title: String {
+    private var title: String { Self.title(of: name) }
+
+    static func title(of name: String) -> String {
         name.prefix(1).uppercased() + name.dropFirst()
     }
 

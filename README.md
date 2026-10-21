@@ -66,6 +66,9 @@ has sessions on disk, the most recent one is resumed.
 - **Failed turns say why.** When a provider refuses a turn — out of credits,
   a bad key, a model that is gone — the reason appears under the message it
   answered, and it is still there after a restart.
+- **You can see it working.** From the moment a message is sent until the
+  turn ends, a row at the foot of the transcript says what omp is doing —
+  sending, thinking, running a tool — and for how long.
 - **omp is kept running.** If a project's omp has stopped, the next message
   starts it again; opening a project that is already running leaves it alone.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an

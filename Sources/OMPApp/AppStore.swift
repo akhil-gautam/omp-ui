@@ -42,6 +42,9 @@ public final class ProjectSession {
     public var error: String?
     public var mode: SessionMode = .interactive
     public var modelList: [ModelInfo] = []
+    /// When the turn in progress began: from the moment a message was sent,
+    /// not from omp's `agent_start`, which can come seconds later.
+    public var turnStarted: Date?
 
     @ObservationIgnored public var process: AgentProcess?
     /// The start in progress, so a second caller waits for it instead of
@@ -61,6 +64,8 @@ public final class ProjectSession {
     }
 
     public var isBusy: Bool { status == .busy }
+    /// Whether a turn is under way, including the wait before omp starts it.
+    public var isWorking: Bool { isBusy || turnStarted != nil }
     public var hasTodos: Bool { todoPhases.contains { !$0.tasks.isEmpty } }
 }
 
@@ -334,14 +339,25 @@ public final class AppStore {
         guard let session = active else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // Show the message straight away; omp's own transcript catches up.
-        session.blocks.append(.user(id: "local-\(UUID().uuidString)", text: trimmed))
-        guard let process = await liveProcess(session) else { return }
+        // Show the message straight away; omp's echo takes this copy over.
+        session.blocks.append(.user(id: "\(Transcript.shownPrefix)\(UUID().uuidString)", text: trimmed))
+        if session.turnStarted == nil { session.turnStarted = .now }
+        guard let process = await liveProcess(session) else {
+            settleUnstartedTurn(session)
+            return
+        }
         do {
-            try await process.send(trimmed, behavior: behavior)
+            let started = try await process.send(trimmed, behavior: behavior)
+            if !started { settleUnstartedTurn(session) }
         } catch {
             banner = error.localizedDescription
+            settleUnstartedTurn(session)
         }
+    }
+
+    /// Ends the wait for a turn omp is not going to run.
+    private func settleUnstartedTurn(_ session: ProjectSession) {
+        if !session.isBusy { session.turnStarted = nil }
     }
 
     public func abort() async {
@@ -420,8 +436,10 @@ public final class AppStore {
         switch frame["type"].string {
         case "agent_start":
             session.status = .busy
+            if session.turnStarted == nil { session.turnStarted = .now }
         case "agent_end":
             session.status = .idle
+            session.turnStarted = nil
             session.unplacedFailures += History.failureReasons(in: frame)
             Task { await self.refresh(id) }
         case "message_start":
@@ -429,7 +447,7 @@ public final class AppStore {
             let role = frame["message"]["role"].string
             if role == "user" {
                 let text = History.plainText(frame["message"]["content"])
-                if !text.isEmpty { session.blocks.append(.user(id: messageID, text: text)) }
+                if !text.isEmpty { Transcript.receive(userMessage: messageID, text: text, into: &session.blocks) }
             }
         case "message_update":
             applyDelta(frame, to: session)
@@ -478,8 +496,10 @@ public final class AppStore {
                 let message = frame["error"]["message"].string
                 banner = message.isEmpty ? "omp could not start the turn." : message
             }
+            if !frame["agentInvoked"].bool { settleUnstartedTurn(session) }
         case "disconnected":
             session.status = .stopped
+            session.turnStarted = nil
             session.error = frame["reason"].optionalString
         default:
             break

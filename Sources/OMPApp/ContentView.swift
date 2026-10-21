@@ -10,7 +10,7 @@ struct TopBarView: View {
         guard let session = store.active else { return "NO PROJECT" }
         switch session.status {
         case .busy: return "WORKING"
-        case .idle: return "READY"
+        case .idle: return session.isWorking ? "WORKING" : "READY"
         case .starting: return "STARTING"
         case .error: return "ERROR"
         case .stopped: return "STOPPED"
@@ -34,7 +34,7 @@ struct TopBarView: View {
             HStack(spacing: 14) {
                 Text(statusLabel)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(store.active?.isBusy == true ? palette.accent : palette.inkFaint)
+                    .foregroundStyle(store.active?.isWorking == true ? palette.accent : palette.inkFaint)
                 Select(
                     icon: "paintpalette",
                     items: Theme.palettes.map { theme in

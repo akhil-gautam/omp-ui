@@ -55,10 +55,16 @@ public actor AgentProcess {
 
     /// Sends a message. While the agent is working, `behavior` decides whether
     /// the message steers the running turn or waits in the queue.
-    public func send(_ text: String, behavior: String? = nil) async throws {
+    ///
+    /// Returns whether omp handed it to the agent. A message omp settles
+    /// itself — a slash command — starts no turn and gets no `prompt_result`.
+    @discardableResult
+    public func send(_ text: String, behavior: String? = nil) async throws -> Bool {
         var payload: [String: JSONValue] = ["message": .string(text)]
         if let behavior { payload["streamingBehavior"] = .string(behavior) }
-        _ = try await call("prompt", payload)
+        let ack = try await call("prompt", payload)
+        if case .bool(let invoked) = ack["agentInvoked"] { return invoked }
+        return true
     }
 
     public func abort() async throws {
