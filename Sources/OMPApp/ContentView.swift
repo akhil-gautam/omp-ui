@@ -18,30 +18,42 @@ struct TopBarView: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            arrow("chevron.left", enabled: store.canGoBack, help: "Go back") {
-                Task { await store.goBack() }
+        ZStack {
+            HStack(spacing: 4) {
+                arrow("chevron.left", enabled: store.canGoBack, help: "Go back") {
+                    Task { await store.goBack() }
+                }
+                arrow("chevron.right", enabled: store.canGoForward, help: "Go forward") {
+                    Task { await store.goForward() }
+                }
+                Spacer(minLength: 0)
             }
-            arrow("chevron.right", enabled: store.canGoForward, help: "Go forward") {
-                Task { await store.goForward() }
+            // The project and what its agent is doing, in a pill at the
+            // centre, lit like the rest of the glass.
+            HStack(spacing: 9) {
+                if let session = store.active {
+                    let colour = palette.colour(for: session.status, working: session.isWorking)
+                    Circle()
+                        .fill(colour)
+                        .frame(width: 6, height: 6)
+                        .shadow(color: colour.opacity(0.9), radius: 3)
+                }
+                Text(store.active?.project.name ?? "omp-ui")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                Text(statusLabel)
+                    .font(Theme.label(9.5))
+                    .tracking(0.6)
+                    .foregroundStyle(store.active?.isWorking == true ? palette.accent : palette.inkFaint)
             }
-            Text(store.active?.project.name ?? "omp-ui")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(palette.ink)
-                .padding(.leading, 8)
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            Text(statusLabel)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(store.active?.isWorking == true ? palette.accent : palette.inkFaint)
-                .padding(.trailing, 4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .glass(radius: 999)
+            .help(store.active.map { "\($0.project.displayPath) — \(statusLabel.lowercased())" } ?? "No project is open")
         }
         .padding(.horizontal, 12)
-        .frame(height: 42)
-        .background(palette.ground)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(palette.hairline).frame(height: 1)
-        }
+        .frame(height: 46)
     }
 
     private func arrow(_ name: String, enabled: Bool, help: String, action: @escaping () -> Void) -> some View {
@@ -72,6 +84,12 @@ struct ContentView: View {
                 MainColumn(store: store)
             }
             .frame(maxHeight: .infinity, alignment: .top)
+            // The lamp over the page: bright over an empty one, faint
+            // behind a conversation so it never competes with the words.
+            .background(alignment: .top) {
+                Spotlight(strength: store.active?.blocks.isEmpty ?? true ? 1 : 0.35)
+                    .animation(.easeOut(duration: 0.6), value: store.active?.blocks.isEmpty ?? true)
+            }
         }
         .environment(\.palette, store.palette)
         .background(store.palette.ground)
@@ -101,6 +119,16 @@ struct MainColumn: View {
             TranscriptView(store: store)
             ComposerView(store: store)
         }
+        // The name, enormous and fading as it falls, in the empty band
+        // between the page and the composer.
+        .background(alignment: .bottom) {
+            if store.active?.blocks.isEmpty ?? true {
+                Wordmark()
+                    .offset(y: -96)
+                    .transition(.opacity)
+            }
+        }
+        .clipped()
     }
 }
 

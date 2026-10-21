@@ -6,6 +6,9 @@ struct ComposerView: View {
     @Environment(\.palette) private var palette
     @Bindable var store: AppStore
     @State private var draft = ""
+    /// Images going with the next message.
+    @State private var images: [ImageAttachment] = []
+    @State private var menuOpen = false
     @FocusState private var focused: Bool
 
     private var session: ProjectSession? { store.active }
@@ -19,6 +22,9 @@ struct ComposerView: View {
             }
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 10) {
+                    if !images.isEmpty {
+                        attachmentStrip
+                    }
                     TextField("Pitch your idea", text: $draft, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14))
@@ -40,16 +46,27 @@ struct ComposerView: View {
                 footer
                     .background(palette.panel)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(palette.hairline, lineWidth: 1)
+            .glass(radius: 14, lifted: true)
+            // Light pooling under the composer, the way it gathers under a
+            // button lit from above.
+            .background {
+                Ellipse()
+                    .fill(palette.glow.opacity(palette.isLight ? 0.10 : 0.07))
+                    .blur(radius: 36)
+                    .padding(.horizontal, 70)
+                    .offset(y: 26)
+                    .allowsHitTesting(false)
             }
-            .shadow(color: .black.opacity(palette.isLight ? 0.08 : 0.45), radius: 20, y: 8)
         }
         .frame(maxWidth: Theme.contentWidth)
         .padding(.horizontal, 28)
         .padding(.bottom, 18)
+        .onChange(of: store.pendingDraft) { _, text in
+            guard let text else { return }
+            draft = text
+            store.pendingDraft = nil
+            focused = true
+        }
     }
 
     // MARK: - The queue
@@ -86,18 +103,27 @@ struct ComposerView: View {
     private var controls: some View {
         HStack(spacing: 8) {
             Button {
-                draft = "/"
-                focused = true
+                menuOpen.toggle()
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(palette.inkDim)
                     .frame(width: 24, height: 24)
+                    .background(Circle().fill(menuOpen ? palette.raised : .clear))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .help("Run a command")
+            .help("Add files, folders, skills, git, rules, a command…")
+            .popover(isPresented: $menuOpen, arrowEdge: .top) {
+                ComposerMenu(
+                    store: store,
+                    onInsert: insert,
+                    onImages: { images += $0; focused = true },
+                    onClose: { menuOpen = false }
+                )
+                .environment(\.palette, palette)
+            }
 
             modeChip
             thinkingChip
@@ -128,15 +154,13 @@ struct ComposerView: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(palette.ground)
                         .frame(width: 30, height: 30)
-                        .background(
-                            draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? palette.raised : palette.ink,
-                            in: Circle()
-                        )
+                        .background(canSend ? palette.ink : palette.raised, in: Circle())
+                        .shadow(color: palette.glow.opacity(canSend && !palette.isLight ? 0.35 : 0), radius: 10)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canSend)
                 .help("Send")
             }
         }
@@ -220,12 +244,71 @@ struct ComposerView: View {
         .padding(.vertical, 8)
     }
 
+    private var canSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty
+    }
+
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard canSend else { return }
+        let attached = images
         draft = ""
+        images = []
         // omp refuses a plain prompt while a turn runs; like its own Enter,
         // a message written meanwhile steers the turn in progress.
-        Task { await store.send(text, behavior: working ? "steer" : nil) }
+        Task { await store.send(text, behavior: working ? "steer" : nil, images: attached) }
+    }
+
+    /// Puts what the menu chose into the message: a mention where the
+    /// message ends, a command at its start, or a whole message.
+    private func insert(_ insertion: ComposerMenu.Insertion) {
+        switch insertion {
+        case .mention(let text):
+            let joiner = draft.isEmpty || draft.hasSuffix(" ") || draft.hasSuffix("\n") ? "" : " "
+            draft += joiner + text + " "
+        case .command(let name):
+            let rest = draft.trimmingCharacters(in: .whitespaces)
+            draft = "/\(name) " + rest
+        case .message(let text):
+            draft = text
+        }
+        focused = true
+    }
+
+    /// The images going with the next message, each with a way to drop it.
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                    HStack(spacing: 7) {
+                        if let data = Data(base64Encoded: image.data), let picture = NSImage(data: data) {
+                            Image(nsImage: picture)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 26, height: 26)
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        }
+                        Text(image.name)
+                            .font(.system(size: 12))
+                            .foregroundStyle(palette.inkDim)
+                            .lineLimit(1)
+                        Button {
+                            images.remove(at: index)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(palette.inkFaint)
+                        }
+                        .buttonStyle(.plain)
+                        .focusable(false)
+                        .help("Leave this image out")
+                    }
+                    .padding(.leading, 4)
+                    .padding(.trailing, 10)
+                    .padding(.vertical, 4)
+                    .glass(radius: 9, raised: true)
+                }
+            }
+        }
     }
 }

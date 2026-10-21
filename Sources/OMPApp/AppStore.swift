@@ -77,6 +77,9 @@ public final class AppStore {
     public var activeID: String?
     public var sessions: [String: ProjectSession] = [:]
     public var banner: String?
+    /// Text for the composer to take up — from a starter on the empty page —
+    /// and focus on. The composer clears it once taken.
+    public var pendingDraft: String?
     public var isLoading = true
     /// The reader's name, for the greeting.
     public var userName: String = NSFullUserName()
@@ -316,23 +319,73 @@ public final class AppStore {
 
     // MARK: - Talking to omp
 
-    public func send(_ text: String, behavior: String? = nil) async {
+    public func send(_ text: String, behavior: String? = nil, images: [ImageAttachment] = []) async {
         guard let session = active else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || !images.isEmpty else { return }
         // Show the message straight away; omp's echo takes this copy over.
-        session.blocks.append(.user(id: "\(Transcript.shownPrefix)\(UUID().uuidString)", text: trimmed))
+        let attached = images.isEmpty ? "" : "\n\n" + images.map { "🖼 \($0.name)" }.joined(separator: "  ")
+        session.blocks.append(.user(id: "\(Transcript.shownPrefix)\(UUID().uuidString)", text: trimmed + attached))
         if session.turnStarted == nil { session.turnStarted = .now }
         guard let process = await liveProcess(session) else {
             settleUnstartedTurn(session)
             return
         }
         do {
-            let started = try await process.send(trimmed, behavior: behavior)
+            let started = try await process.send(trimmed, behavior: behavior, images: images)
             if !started { settleUnstartedTurn(session) }
         } catch {
             banner = error.localizedDescription
             settleUnstartedTurn(session)
+        }
+    }
+
+    /// Runs a shell command in the open project through omp, which keeps its
+    /// output in the session for the agent to read. The command shows as a
+    /// card while it runs and holds its output when it ends.
+    public func runInTerminal(_ command: String) async {
+        guard let session = active else { return }
+        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return }
+        let id = "terminal-\(UUID().uuidString)"
+        let args: JSONValue = .object(["command": .string(command)])
+        session.blocks.append(.tool(id: id, name: "terminal", args: args, output: nil, isError: false, running: true))
+        guard let process = await liveProcess(session) else { return }
+        do {
+            let result = try await process.bash(command)
+            if let index = session.blocks.firstIndex(where: { $0.id == id }) {
+                session.blocks[index] = .tool(id: id, name: "terminal", args: args, output: result.output, isError: result.failed, running: false)
+            }
+        } catch {
+            session.blocks.removeAll { $0.id == id }
+            banner = error.localizedDescription
+        }
+    }
+
+    /// The open project's conversations, newest first.
+    public func conversations() -> [SessionFile] {
+        guard let session = active else { return [] }
+        return SessionFiles.sessions(for: session.project.path)
+    }
+
+    /// Switches the open project to one of its earlier conversations.
+    public func openConversation(_ file: SessionFile) async {
+        guard let session = active, let process = await liveProcess(session) else { return }
+        do {
+            guard try await process.switchSession(path: file.path) else {
+                banner = "omp would not open \u{201C}\(file.title)\u{201D}: it was recorded in another folder."
+                return
+            }
+            // The failures kept belonged to the conversation being left; the
+            // new one's are read from its file.
+            session.failures = []
+            session.unplacedFailures = []
+            session.recordedFailures = await Task.detached {
+                History.failures(inSessionFile: URL(fileURLWithPath: file.path))
+            }.value
+            await refresh(session.project.id)
+        } catch {
+            banner = error.localizedDescription
         }
     }
 

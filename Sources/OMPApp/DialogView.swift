@@ -95,12 +95,7 @@ struct DialogView: View {
         }
         .padding(18)
         .frame(maxWidth: 520, alignment: .leading)
-        .background(palette.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(palette.hairline, lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.5), radius: 30, y: 12)
+        .glass(radius: 14, lifted: true)
     }
 }
 

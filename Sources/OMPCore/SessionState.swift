@@ -102,13 +102,18 @@ public struct TodoPhase: Sendable, Identifiable, Equatable {
 public struct SlashCommand: Sendable, Identifiable, Equatable {
     public var id: String { name }
     public var name: String
+    /// Where it comes from: `builtin`, `skill`, `extension`, `custom`,
+    /// `mcp_prompt` or `file`.
     public var source: String
     public var description: String?
+    /// What to write after it, when it takes arguments.
+    public var hint: String?
 
-    public init(name: String, source: String, description: String? = nil) {
+    public init(name: String, source: String, description: String? = nil, hint: String? = nil) {
         self.name = name
         self.source = source
         self.description = description
+        self.hint = hint
     }
 
     public init?(json: JSONValue) {
@@ -116,7 +121,35 @@ public struct SlashCommand: Sendable, Identifiable, Equatable {
         self.name = name
         self.source = json["source"].string
         self.description = json["description"].optionalString
+        self.hint = json["input"]["hint"].optionalString
     }
+
+    public var isSkill: Bool { source == "skill" }
+}
+
+/// What a shell command run through omp printed, and how it ended.
+public struct BashResult: Sendable, Equatable {
+    public var output: String
+    public var exitCode: Int?
+    public var cancelled: Bool
+    public var truncated: Bool
+
+    public init(output: String, exitCode: Int?, cancelled: Bool = false, truncated: Bool = false) {
+        self.output = output
+        self.exitCode = exitCode
+        self.cancelled = cancelled
+        self.truncated = truncated
+    }
+
+    public init(json: JSONValue) {
+        self.output = json["output"].string
+        self.exitCode = json["exitCode"].exactInteger
+        self.cancelled = json["cancelled"].bool
+        self.truncated = json["truncated"].bool
+    }
+
+    /// Whether the command did not finish cleanly.
+    public var failed: Bool { cancelled || (exitCode.map { $0 != 0 } ?? false) }
 }
 
 /// The messages waiting for the agent.

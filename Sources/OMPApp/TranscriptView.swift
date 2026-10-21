@@ -54,20 +54,45 @@ struct WorkingRow: View {
     let since: Date
 
     var body: some View {
-        HStack(spacing: 9) {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.75)
-                .frame(width: 14, height: 14)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+        // Drawn frame by frame only while a turn runs: a ring of light
+        // circling, and a sheen passing over the words.
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 10) {
+                Circle()
+                    .trim(from: 0, to: 0.72)
+                    .stroke(
+                        AngularGradient(colors: [palette.accent.opacity(0), palette.accent], center: .center),
+                        style: StrokeStyle(lineWidth: 1.7, lineCap: .round)
+                    )
+                    .frame(width: 13, height: 13)
+                    .rotationEffect(.degrees((time * 320).truncatingRemainder(dividingBy: 360)))
+                    .shadow(color: palette.accent.opacity(0.6), radius: 4)
                 Text("\(activity)  ·  \(WorkingRow.elapsed(from: since, to: context.date))")
                     .font(Theme.body(12.5))
-                    .foregroundStyle(palette.inkDim)
                     .monospacedDigit()
+                    .foregroundStyle(WorkingRow.sheen(palette, at: time))
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .glass(radius: 999)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .help("omp is working on your message")
+    }
+
+    /// A band of light crossing the words, once every two seconds.
+    private static func sheen(_ palette: Palette, at time: TimeInterval) -> LinearGradient {
+        let phase = (time / 2).truncatingRemainder(dividingBy: 1) * 1.8 - 0.4
+        return LinearGradient(
+            stops: [
+                .init(color: palette.inkDim, location: 0),
+                .init(color: palette.ink, location: 0.5),
+                .init(color: palette.inkDim, location: 1),
+            ],
+            startPoint: UnitPoint(x: phase - 0.35, y: 0.5),
+            endPoint: UnitPoint(x: phase + 0.35, y: 0.5)
+        )
     }
 
     /// What omp is doing, read from where the turn has got to.
@@ -89,28 +114,119 @@ struct WorkingRow: View {
     }
 }
 
-/// The greeting, shown while there is nothing to read.
+/// The empty page: a lamp over it, a headline in the light, and a few ways
+/// to begin.
 struct GreetingView: View {
     @Environment(\.palette) private var palette
     @Bindable var store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("What are we building?")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(palette.ink)
+        VStack(spacing: 18) {
             if let session = store.active {
-                Text("omp is ready in \(session.project.name).")
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(palette.inkDim)
+                Chip(icon: "sparkle", text: GreetingView.where(session), tint: palette.accent)
+            }
+            Text(store.active == nil ? "Give omp a place to work" : "What are we building?")
+                .font(.system(size: 46, weight: .semibold))
+                .tracking(-1.2)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(LinearGradient(
+                    colors: [palette.ink, palette.ink.opacity(0.48)],
+                    startPoint: .top, endPoint: .bottom
+                ))
+            Text(store.active == nil
+                 ? "Add a project folder and omp starts on it, picking up where its last session left off."
+                 : "Ask for a change, a fix or an explanation. omp reads the code, runs the commands and shows its work here.")
+                .font(.system(size: 14.5))
+                .foregroundStyle(palette.inkDim)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 470)
+            if store.active == nil {
+                Button {
+                    Task { await store.addProjectPicker() }
+                } label: {
+                    Text("Add a project")
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(palette.ground)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(palette.ink, in: Capsule())
+                        .shadow(color: palette.glow.opacity(palette.isLight ? 0.25 : 0.35), radius: 14)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Add a project (⌘N)")
+                .padding(.top, 6)
             } else {
-                Text("Add a project to give omp a place to work.")
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(palette.inkDim)
+                HStack(spacing: 12) {
+                    ForEach(Starter.all) { starter in
+                        StarterTile(starter: starter) { store.pendingDraft = starter.prompt }
+                    }
+                }
+                .padding(.top, 22)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 60)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 64)
+    }
+
+    /// Where omp is, as the pill above the headline says it.
+    static func `where`(_ session: ProjectSession) -> String {
+        let place = session.branch.map { "\(session.project.name) · \($0)" } ?? session.project.name
+        switch session.status {
+        case .starting: return "Starting omp in \(place)"
+        case .error: return "omp could not start in \(place)"
+        case .stopped: return "omp is stopped in \(place)"
+        default: return "omp is ready in \(place)"
+        }
+    }
+}
+
+/// A way to begin, offered on the empty page.
+struct Starter: Identifiable {
+    let id: String
+    let symbol: String
+    let title: String
+    let prompt: String
+
+    static let all = [
+        Starter(id: "tour", symbol: "map", title: "Tour the\ncodebase",
+                prompt: "Give me a tour of this codebase: what it does, how it is laid out, and where the important parts live."),
+        Starter(id: "bug", symbol: "ant", title: "Hunt down\na bug",
+                prompt: "Help me track down a bug: "),
+        Starter(id: "tests", symbol: "checkmark.seal", title: "Write the\nmissing tests",
+                prompt: "Find the code in this project that has no tests, and write them."),
+        Starter(id: "review", symbol: "arrow.triangle.branch", title: "Review my\nchanges",
+                prompt: "Review my uncommitted changes and tell me what you would change."),
+    ]
+}
+
+/// One way to begin: an icon on a lit plate and a line under it, on glass.
+private struct StarterTile: View {
+    @Environment(\.palette) private var palette
+    let starter: Starter
+    let onChoose: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: onChoose) {
+            VStack(spacing: 14) {
+                IconPlate(symbol: starter.symbol, size: 36)
+                Text(starter.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(hovering ? palette.ink : palette.inkDim)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(width: 148, height: 132)
+            .glass(radius: 16)
+            .shadow(color: palette.glow.opacity(hovering ? (palette.isLight ? 0.18 : 0.12) : 0), radius: 18)
+            .scaleEffect(hovering ? 1.03 : 1)
+            .animation(.easeOut(duration: 0.18), value: hovering)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hovering = $0 }
+        .help("Start with: \(starter.prompt)")
     }
 }
 
@@ -129,23 +245,17 @@ struct BlockView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(palette.ink)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 15)
                     .padding(.vertical, 9)
-                    .background(palette.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .glass(radius: 18, raised: true)
                     .frame(maxWidth: 560, alignment: .trailing)
             }
         case .text(_, let text):
             MarkdownView(source: text)
         case .thinking(_, let text):
             // Thinking is always shown: it is the reasoning, not a summary.
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "brain")
-                        .font(.system(size: 13))
-                    Text("Thinking")
-                        .font(.system(size: 13.5))
-                }
-                .foregroundStyle(palette.inkDim)
+            VStack(alignment: .leading, spacing: 10) {
+                Chip(icon: "brain", text: "Thinking")
                 MarkdownView(source: text, ink: palette.inkDim)
             }
         case .tool(_, let name, let args, let output, let isError, let running):
@@ -206,7 +316,7 @@ struct ToolCallView: View {
         switch name {
         case "read", "write", "edit", "notebook_edit", "apply_patch":
             return args["path"].optionalString ?? args["file_path"].optionalString
-        case "bash", "shell":
+        case "bash", "shell", "terminal":
             return args["command"].optionalString
         case "grep", "glob", "rg":
             return args["pattern"].optionalString
@@ -226,20 +336,34 @@ struct ToolCallView: View {
         name.prefix(1).uppercased() + name.dropFirst()
     }
 
+    /// The icon for a kind of call.
+    static func symbol(of name: String) -> String {
+        switch name {
+        case "read": "doc.text"
+        case "write", "edit", "notebook_edit", "apply_patch", "ast_edit": "pencil"
+        case "grep", "glob", "rg", "find", "search": "magnifyingglass"
+        case "web_search", "fetch", "web_fetch", "browser": "globe"
+        case "task", "agent": "person.2"
+        case "eval": "curlybraces"
+        case "todo", "todo_write": "checklist"
+        case "ask": "questionmark.bubble"
+        default: "terminal"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: "terminal")
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.inkDim)
+            HStack(spacing: 10) {
+                IconPlate(symbol: Self.symbol(of: name), size: 22)
                 Text(title)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: 13.5, weight: .medium))
                     .foregroundStyle(palette.ink)
                 Spacer(minLength: 8)
                 if running {
                     Circle()
                         .fill(palette.accent)
                         .frame(width: 6, height: 6)
+                        .shadow(color: palette.accent, radius: 4)
                 }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
@@ -295,12 +419,7 @@ struct ToolCallView: View {
                 }
             }
         }
-        .background(palette.ground)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(palette.hairline, lineWidth: 1)
-        }
+        .glass(radius: 12)
         .help(expanded ? "Hide the result" : "Show the result")
     }
 }

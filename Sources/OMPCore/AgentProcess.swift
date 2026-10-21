@@ -53,18 +53,31 @@ public actor AgentProcess {
 
     // MARK: - Commands
 
-    /// Sends a message. While the agent is working, `behavior` decides whether
-    /// the message steers the running turn or waits in the queue.
+    /// Sends a message, with any images it carries. While the agent is
+    /// working, `behavior` decides whether the message steers the running
+    /// turn or waits in the queue.
     ///
     /// Returns whether omp handed it to the agent. A message omp settles
     /// itself — a slash command — starts no turn and gets no `prompt_result`.
     @discardableResult
-    public func send(_ text: String, behavior: String? = nil) async throws -> Bool {
-        var payload: [String: JSONValue] = ["message": .string(text)]
-        if let behavior { payload["streamingBehavior"] = .string(behavior) }
-        let ack = try await call("prompt", payload)
+    public func send(_ text: String, behavior: String? = nil, images: [ImageAttachment] = []) async throws -> Bool {
+        let ack = try await call("prompt", Self.prompt(text, behavior: behavior, images: images))
         if case .bool(let invoked) = ack["agentInvoked"] { return invoked }
         return true
+    }
+
+    /// The `prompt` command's parameters.
+    static func prompt(_ text: String, behavior: String?, images: [ImageAttachment]) -> [String: JSONValue] {
+        var payload: [String: JSONValue] = ["message": .string(text)]
+        if let behavior { payload["streamingBehavior"] = .string(behavior) }
+        if !images.isEmpty { payload["images"] = .array(images.map(\.json)) }
+        return payload
+    }
+
+    /// Runs a shell command in the project the way omp's own `!command` does:
+    /// its output goes into the session, where the agent reads it.
+    public func bash(_ command: String) async throws -> BashResult {
+        BashResult(json: try await call("bash", ["command": .string(command)], timeout: .seconds(600)))
     }
 
     public func abort() async throws {
@@ -120,9 +133,14 @@ public actor AgentProcess {
         _ = try await call("extension_ui_response", payload)
     }
 
-    public func switchSession(path: String) async throws {
-        _ = try await call("switch_session", ["sessionPath": .string(path)])
+    /// Switches to another of the project's sessions. Returns false when omp
+    /// refused: it will not switch to a session recorded in another folder.
+    @discardableResult
+    public func switchSession(path: String) async throws -> Bool {
+        let reply = try await call("switch_session", ["sessionPath": .string(path)])
+        return !reply["cancelled"].bool
     }
+
 
     public func newSession() async throws {
         _ = try await call("new_session")
@@ -156,6 +174,14 @@ public enum History {
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     blocks.append(.user(id: "m\(index)", text: text))
                 }
+            case "bashExecution":
+                // A command run from the composer's terminal: shown as the
+                // card a tool call gets.
+                let result = BashResult(json: message)
+                blocks.append(.tool(
+                    id: "m\(index)", name: "terminal", args: .object(["command": .string(message["command"].string)]),
+                    output: result.output, isError: result.failed, running: false
+                ))
             case "assistant":
                 for (position, item) in message["content"].array.enumerated() {
                     let id = "m\(index)c\(position)"

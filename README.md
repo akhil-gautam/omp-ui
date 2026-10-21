@@ -53,9 +53,25 @@ has sessions on disk, the most recent one is resumed.
   is a card: the call itself on a line of its own, and the result omp saw
   underneath it.
 - **Composer.** Enter sends, Shift+Enter adds a line. While a turn is running
-  Enter queues a follow-up and ⌘Enter steers into the running turn; the send
-  button stays there, so a second and a third message can be queued as well,
-  and the queue is listed above the composer. **Stop** aborts the turn.
+  the composer shows only **Stop**; Enter still sends what you write, as a
+  steering message omp reads at its next step — the way Enter works in omp's
+  own interface — and the queue is listed above the composer.
+- **The + menu.** The button at the start of the composer brings things into
+  a message:
+  - *Upload file* attaches images; any other file is named so omp reads it.
+  - *Files* and *Directories* list the project — git's own list in a
+    repository — and name the one you pick as `@path`, which omp expands into
+    the file's contents or the folder's listing.
+  - *Skills* and *Slash commands* are omp's own, with their descriptions, and
+    start the message.
+  - *Conversations* lists the project's earlier sessions and switches to one.
+  - *Git* points at the uncommitted or staged changes, a branch or a commit.
+  - *Rules* lists the rules files omp works under — `.omp/rules`, `AGENTS.md`,
+    `CLAUDE.md`, `.cursor/rules` and the rest, in the project and your own.
+  - *Terminal* runs a command in the project through omp, which keeps the
+    output in the conversation for the agent to read; it shows as a card.
+  - *Codemaps* asks omp to map a folder or the whole project — entry points,
+    flows, key files — as a diagram. omp has no map of its own to show.
 - **Session mode.** The chip beside the composer switches between
   *Interactive* — a steer lands on the running turn at once — and *Autopilot*,
   which lets the turn finish first. Either way the messages you send while
@@ -85,8 +101,8 @@ has sessions on disk, the most recent one is resumed.
   searchable by name, provider or id.
 - **A window that runs to its edges.** The content begins at the top of the
   window with the traffic lights drawn over it, the way a browser's does.
-- **Live state.** The plan omp is working through, context usage, message
-  count and the current model.
+- **Live state.** The plan omp is working through, and the project's status
+  in the top bar.
 - **Keyboard.** ⌘K focuses the composer, ⌘N adds a project, ⌘1…⌘9 switch
   between projects.
 
@@ -97,12 +113,19 @@ has sessions on disk, the most recent one is resumed.
 - **The project list.** A dot beside each project says whether its agent is
   ready, working or stopped. Hovering a running project shows a stop button,
   which ends that agent and gives its memory back; right-click for the same.
+- **The light.** A lamp hangs over the page: bright over an empty one, where
+  a headline sits in its light with a few ways to begin and the name set
+  enormous beneath them, and faint behind a conversation. Every surface is
+  glass lit along its top edge, and labels sit in pills — in all twenty
+  themes, drawn from each theme's own colours.
+- **The top bar.** The project and its agent's status in a pill at the
+  centre, with back and forward beside it.
 - **The conversation.** What you said is a bubble on the right. The agent's
-  thinking is a quiet note. Its tool calls are cards, each with the call on a
-  line of its own and the result beneath it.
-- **The composer.** A card that floats over the page, with the model, the mode
-  and the thinking level along its bottom edge, and the branch and folder
-  below that.
+  thinking follows a *Thinking* pill. Its tool calls are cards, each with an
+  icon for its kind, the call on a line of its own and the result beneath it.
+- **The composer.** A card that floats over the page with light pooling under
+  it, with the model, the mode and the thinking level along its bottom edge,
+  and the branch and folder below that.
 
 ## Layout
 
@@ -114,8 +137,11 @@ has sessions on disk, the most recent one is resumed.
 | `Sources/OMPCore/Markdown.swift` | The markdown reader. |
 | `Sources/OMPCore/Project.swift` | The project list, kept in the app's support directory. |
 | `Sources/OMPCore/OMPRuntime.swift` | Finding omp, and the sessions a project has. |
+| `Sources/OMPCore/ComposerContext.swift` | What the + menu brings into a message: images, `@path` mentions, the project's files, rules, git references, codemaps. |
 | `Sources/OMPApp/` | The interface: the shell, the sidebar, the transcript, the composer. |
 | `Sources/OMPApp/Theme.swift` | The colours and type the interface is built from. |
+| `Sources/OMPApp/Glass.swift` | The light and glass: the lamp, lit surfaces, pills, the wordmark. |
+| `Sources/OMPApp/ComposerMenu.swift` | The composer's + menu and its pages. |
 | `scripts/build-app.sh` | Assembles the `.app` and signs it. |
 
 ## Tests

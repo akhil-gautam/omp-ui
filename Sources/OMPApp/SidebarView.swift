@@ -172,14 +172,18 @@ private struct ProjectRow: View {
                 Circle()
                     .fill(colour)
                     .frame(width: 6, height: 6)
+                    .shadow(color: status == .stopped ? .clear : colour.opacity(0.8), radius: 3)
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(isActive || hovering ? palette.raised : .clear)
-        )
+        .background {
+            if isActive {
+                Color.clear.glass(radius: 8, raised: true)
+            } else if hovering {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(palette.raised.opacity(0.6))
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .onHover { hovering = $0 }
@@ -194,15 +198,7 @@ private struct ProjectRow: View {
         .help("Open \(project.name)")
     }
 
-    private var colour: Color {
-        switch status {
-        case .busy: palette.accent
-        case .idle: palette.success
-        case .starting: palette.accent.opacity(0.6)
-        case .error: palette.danger
-        case .stopped: palette.inkFaint
-        }
-    }
+    private var colour: Color { palette.colour(for: status) }
 
     /// How long ago a project was added.
     static func ago(_ date: Date) -> String {
