@@ -73,11 +73,11 @@ has sessions on disk, the most recent one is resumed.
   starts it again; opening a project that is already running leaves it alone.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt — the request appears and omp waits for your answer.
-- **What the project can do.** The sidebar's *Customizations* list opens the
-  project's overview, its tools, its skills, its extensions and its prompts.
-- **Twenty themes.** The picker in the top bar changes the whole interface:
-  a ground, a set of greys and one accent. The choice is remembered. The
-  default is a white page and a grey rail, the way a document is.
+- **Twenty themes.** *Settings*, at the foot of the rail, shows each theme as
+  a small window in its own colours; choosing one changes the whole
+  interface — a ground, a set of greys and one accent. The choice is
+  remembered. The default is a white page and a grey rail, the way a
+  document is.
 - **The model list.** Every model omp offers, named the way omp names it —
   `provider/id` — so `anthropic/claude-opus-5-5` on an Anthropic login and
   `openrouter/anthropic/claude-opus-5.5` billed to OpenRouter never look
@@ -92,11 +92,11 @@ has sessions on disk, the most recent one is resumed.
 
 ## The shape of the interface
 
-- **The rail.** The projects on top, with a search over them; the project's
-  own pages — its overview, tools, skills, extensions and prompts — at the
-  foot.
-- **The tab bar.** Every open project is a tab, so the ones that are working
-  are all in sight. Closing a tab stops that agent and gives its memory back.
+- **The rail.** The projects on top, with a search over them; *Settings* at
+  the foot.
+- **The project list.** A dot beside each project says whether its agent is
+  ready, working or stopped. Hovering a running project shows a stop button,
+  which ends that agent and gives its memory back; right-click for the same.
 - **The conversation.** What you said is a bubble on the right. The agent's
   thinking is a quiet note. Its tool calls are cards, each with the call on a
   line of its own and the result beneath it.

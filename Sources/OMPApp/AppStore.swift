@@ -37,7 +37,6 @@ public final class ProjectSession {
     public var pendingRequest: UIRequest?
     public var notices: [Notice] = []
     public var statusText: String?
-    public var inventory: Inventory?
     public var branch: String?
     public var error: String?
     public var mode: SessionMode = .interactive
@@ -69,22 +68,6 @@ public final class ProjectSession {
     public var hasTodos: Bool { todoPhases.contains { !$0.tasks.isEmpty } }
 }
 
-/// The pages the main column can show.
-public enum AppView: String, CaseIterable, Sendable {
-    case transcript, overview, tools, skills, extensions, prompts
-
-    public var title: String {
-        switch self {
-        case .transcript: "Transcript"
-        case .overview: "Overview"
-        case .tools: "Tools"
-        case .skills: "Skills"
-        case .extensions: "Extensions"
-        case .prompts: "Prompts"
-        }
-    }
-}
-
 /// The app's root store: the projects, their sessions, and what the reader
 /// is looking at.
 @MainActor
@@ -94,7 +77,6 @@ public final class AppStore {
     public var activeID: String?
     public var sessions: [String: ProjectSession] = [:]
     public var banner: String?
-    public var view: AppView = .transcript
     public var isLoading = true
     /// The reader's name, for the greeting.
     public var userName: String = NSFullUserName()
@@ -159,7 +141,6 @@ public final class AppStore {
     public func open(_ id: String, record: Bool = true) async {
         guard let project = projects.first(where: { $0.id == id }) else { return }
         activeID = id
-        view = .transcript
         if record {
             history.removeAll { $0 == id }
             history.insert(id, at: 0)

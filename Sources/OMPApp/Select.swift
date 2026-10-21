@@ -190,7 +190,7 @@ struct Select: View {
 
 /// The popover's arrow is drawn by the system in the colour of the window it
 /// belongs to, so the window is told what the panel's colour is.
-private struct PopoverBackground: NSViewRepresentable {
+struct PopoverBackground: NSViewRepresentable {
     let colour: Color
 
     func makeNSView(context: Context) -> NSView {

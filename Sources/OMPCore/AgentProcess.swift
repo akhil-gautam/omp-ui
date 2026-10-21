@@ -146,6 +146,7 @@ public actor AgentProcess {
 /// Turning a session's messages into transcript blocks.
 public enum History {
     public static func blocks(from messages: [JSONValue]) -> [Block] {
+        let recovered = recoveredFailures(in: messages)
         var blocks: [Block] = []
         for (index, message) in messages.enumerated() {
             let role = message["role"].string.isEmpty ? "assistant" : message["role"].string
@@ -174,8 +175,9 @@ public enum History {
                     }
                 }
                 // A turn the provider refused leaves no content, only the
-                // reason; without it the turn would look like silence.
-                if message["stopReason"].string == "error" {
+                // reason; without it the turn would look like silence. One
+                // omp recovered from by retrying is not a failure.
+                if message["stopReason"].string == "error", !recovered.contains(index) {
                     let reason = message["errorMessage"].string
                     blocks.append(.failure(id: "m\(index)f", text: reason.isEmpty ? "The model returned an error." : reason))
                 }
@@ -201,6 +203,29 @@ public enum History {
         return blocks
     }
 
+    /// Whether a message begins a turn: something the reader said.
+    private static func beginsTurn(_ message: JSONValue) -> Bool {
+        let role = message["role"].string
+        guard role == "user" || role == "developer" else { return false }
+        return !plainText(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The failed replies that are not how their turn ended: omp retried and
+    /// a later reply in the same turn took their place.
+    private static func recoveredFailures(in messages: [JSONValue]) -> Set<Int> {
+        var recovered: Set<Int> = []
+        var laterReply = false
+        for (index, message) in messages.enumerated().reversed() {
+            if beginsTurn(message) {
+                laterReply = false
+            } else if message["role"].string == "assistant" {
+                if laterReply, message["stopReason"].string == "error" { recovered.insert(index) }
+                laterReply = true
+            }
+        }
+        return recovered
+    }
+
     /// A turn that failed, and the message it answered: the failure belongs
     /// at the end of the turn that began with the `turn`-th thing the reader
     /// said, counting from one.
@@ -214,17 +239,18 @@ public enum History {
         }
     }
 
-    /// The reasons a finished turn failed, read from its `agent_end`.
+    /// Why a finished turn failed, read from its `agent_end`: the reason its
+    /// last reply gave, if that reply failed. A failure omp retried past is
+    /// not how the turn ended.
     ///
     /// omp keeps a failed reply out of the session's messages — the model
     /// never sees it again — so the only place its reason arrives is the
     /// event that ends the turn.
     public static func failureReasons(in agentEnd: JSONValue) -> [String] {
-        agentEnd["messages"].array.compactMap { message in
-            guard message["role"].string == "assistant", message["stopReason"].string == "error" else { return nil }
-            let reason = message["errorMessage"].string
-            return reason.isEmpty ? "The model returned an error." : reason
-        }
+        guard let last = agentEnd["messages"].array.last(where: { $0["role"].string == "assistant" }),
+              last["stopReason"].string == "error" else { return [] }
+        let reason = last["errorMessage"].string
+        return [reason.isEmpty ? "The model returned an error." : reason]
     }
 
     /// The failures a session file records, numbered by the turns in that
@@ -236,19 +262,26 @@ public enum History {
         guard let data = try? Data(contentsOf: url) else { return ([], 0) }
         var failures: [Failure] = []
         var turns = 0
+        // The last reply of the turn so far, if it failed; a later reply in
+        // the same turn means omp recovered.
+        var ending: Failure?
         for line in data.split(separator: 10) {
             guard let entry = try? JSONDecoder().decode(JSONValue.self, from: Data(line)) else { continue }
             let message = entry["message"]
-            switch message["role"].string {
-            case "user", "developer":
-                if !plainText(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { turns += 1 }
-            case "assistant" where message["stopReason"].string == "error":
-                let reason = message["errorMessage"].string
-                failures.append(Failure(turn: turns, text: reason.isEmpty ? "The model returned an error." : reason))
-            default:
-                break
+            if beginsTurn(message) {
+                if let ending { failures.append(ending) }
+                ending = nil
+                turns += 1
+            } else if message["role"].string == "assistant" {
+                if message["stopReason"].string == "error" {
+                    let reason = message["errorMessage"].string
+                    ending = Failure(turn: turns, text: reason.isEmpty ? "The model returned an error." : reason)
+                } else {
+                    ending = nil
+                }
             }
         }
+        if let ending { failures.append(ending) }
         return (failures, turns)
     }
 

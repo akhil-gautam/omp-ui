@@ -71,6 +71,45 @@ struct HistoryTests {
         #expect(History.failureReasons(in: end) == ["402 more credits"])
     }
 
+    /// A dropped connection omp retried past, as i-shares recorded it.
+    private let dropped: JSONValue = .object([
+        "role": .string("assistant"), "content": .array([]), "stopReason": .string("error"),
+        "errorMessage": .string("The socket connection was closed unexpectedly before the response completed"),
+    ])
+    private let answered: JSONValue = .object([
+        "role": .string("assistant"), "stopReason": .string("stop"),
+        "content": .array([.object(["type": .string("text"), "text": .string("Done.")])]),
+    ])
+
+    @Test("a failure omp retried past is not how the turn ended")
+    func aRecoveredFailureIsNotShown() {
+        let ask: JSONValue = .object(["role": .string("user"), "content": .string("fix it")])
+        let blocks = History.blocks(from: [ask, dropped, answered])
+        #expect(!blocks.contains { if case .failure = $0 { true } else { false } })
+        #expect(History.failureReasons(in: .object(["messages": .array([ask, dropped, answered])])).isEmpty)
+        // Retries that all failed show the last reason once.
+        let refused: JSONValue = .object(["role": .string("assistant"), "stopReason": .string("error"), "errorMessage": .string("402")])
+        let failures = History.blocks(from: [ask, dropped, refused]).filter { if case .failure = $0 { true } else { false } }
+        #expect(failures.map(\.text) == ["402"])
+    }
+
+    @Test("a session file's recovered failure is not read back")
+    func aRecoveredFailureIsNotRecorded() throws {
+        let lines = [
+            #"{"type":"message","message":{"role":"user","content":"fix it"}}"#,
+            #"{"type":"message","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"The socket connection was closed"}}"#,
+            #"{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"stopReason":"stop"}}"#,
+            #"{"type":"message","message":{"role":"user","content":"and again"}}"#,
+            #"{"type":"message","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"402 more credits"}}"#,
+        ]
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-session-\(UUID().uuidString).jsonl")
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let recorded = History.failures(inSessionFile: url)
+        #expect(recorded.failures == [History.Failure(turn: 2, text: "402 more credits")])
+    }
+
     @Test("a resumed session's failures are read from its file")
     func failuresSurviveARestart() throws {
         let lines = [

@@ -9,7 +9,8 @@ struct ComposerView: View {
     @FocusState private var focused: Bool
 
     private var session: ProjectSession? { store.active }
-    private var busy: Bool { session?.isBusy ?? false }
+    /// From the moment a message is sent until the turn ends.
+    private var working: Bool { session?.isWorking ?? false }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +26,9 @@ struct ComposerView: View {
                         .lineLimit(1...6)
                         .focused($focused)
                         .frame(minHeight: 22, alignment: .topLeading)
-                        .help("Write to the agent. Return sends it.")
+                        .help(working
+                              ? "Return adds this to the turn in progress; omp reads it at its next step."
+                              : "Write to the agent. Return sends it.")
                         .onSubmit(send)
                     controls
                 }
@@ -103,7 +106,9 @@ struct ComposerView: View {
 
             modelChip
 
-            if busy {
+            // One button: stop while a turn is under way, send otherwise.
+            // A message written meanwhile still goes with Return.
+            if working {
                 Button {
                     Task { await store.abort() }
                 } label: {
@@ -117,23 +122,23 @@ struct ComposerView: View {
                 .buttonStyle(.plain)
                 .focusable(false)
                 .help("Stop the turn")
+            } else {
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(palette.ground)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? palette.raised : palette.ink,
+                            in: Circle()
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Send")
             }
-
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(palette.ground)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? palette.raised : palette.ink,
-                        in: Circle()
-                    )
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .help(busy ? "Queue this message" : "Send")
         }
     }
 
@@ -219,6 +224,8 @@ struct ComposerView: View {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         draft = ""
-        Task { await store.send(text) }
+        // omp refuses a plain prompt while a turn runs; like its own Enter,
+        // a message written meanwhile steers the turn in progress.
+        Task { await store.send(text, behavior: working ? "steer" : nil) }
     }
 }

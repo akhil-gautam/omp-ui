@@ -31,24 +31,10 @@ struct TopBarView: View {
                 .padding(.leading, 8)
                 .lineLimit(1)
             Spacer(minLength: 12)
-            HStack(spacing: 14) {
-                Text(statusLabel)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(store.active?.isWorking == true ? palette.accent : palette.inkFaint)
-                Select(
-                    icon: "paintpalette",
-                    items: Theme.palettes.map { theme in
-                        Select.Item(id: theme.name, title: theme.name, detail: theme.isLight ? "light" : "dark")
-                    },
-                    selected: store.themeName,
-                    placeholder: "Theme",
-                    plain: true,
-                    help: "The colours of the interface"
-                ) { item in
-                    store.themeName = item.id
-                }
-                .font(.system(size: 12.5))
-            }
+            Text(statusLabel)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(store.active?.isWorking == true ? palette.accent : palette.inkFaint)
+                .padding(.trailing, 4)
         }
         .padding(.horizontal, 12)
         .frame(height: 42)
@@ -73,92 +59,6 @@ struct TopBarView: View {
     }
 }
 
-/// The open projects, as tabs.
-struct TabBarView: View {
-    @Environment(\.palette) private var palette
-    @Bindable var store: AppStore
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(store.projects) { project in
-                        tab(project)
-                    }
-                }
-                .padding(.horizontal, 8)
-            }
-            Button {
-                Task { await store.addProjectPicker() }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(palette.inkFaint)
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help("Add a project (⌘N)")
-            Spacer(minLength: 0)
-        }
-        .frame(height: 34)
-        .background(palette.ground)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(palette.hairline).frame(height: 1)
-        }
-    }
-
-    private func tab(_ project: Project) -> some View {
-        let active = store.activeID == project.id
-        return HStack(spacing: 7) {
-            // The tab and its close button are separate targets, so closing
-            // a tab can never also open it.
-            Button {
-                Task { await store.open(project.id) }
-            } label: {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(colour(for: project))
-                        .frame(width: 6, height: 6)
-                    Text(project.name)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(active ? palette.ink : palette.inkDim)
-                        .lineLimit(1)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help("Open \(project.name)")
-            Button {
-                Task { await store.close(project.id) }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(palette.inkFaint)
-                    .frame(width: 14, height: 14)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help("Stop this agent and close the tab")
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-    }
-
-    private func colour(for project: Project) -> Color {
-        switch store.sessions[project.id]?.status ?? .stopped {
-        case .busy: palette.accent
-        case .idle: palette.success
-        case .starting: palette.accent.opacity(0.6)
-        case .error: palette.danger
-        case .stopped: palette.inkFaint
-        }
-    }
-}
-
 /// The window's shell.
 struct ContentView: View {
     @Environment(\.palette) private var palette
@@ -169,7 +69,6 @@ struct ContentView: View {
             SidebarView(store: store)
             VStack(spacing: 0) {
                 TopBarView(store: store)
-                TabBarView(store: store)
                 MainColumn(store: store)
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -199,11 +98,7 @@ struct MainColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if store.view == .transcript {
-                TranscriptView(store: store)
-            } else {
-                PanelView(store: store)
-            }
+            TranscriptView(store: store)
             ComposerView(store: store)
         }
     }

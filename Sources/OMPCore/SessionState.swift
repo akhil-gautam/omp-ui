@@ -119,34 +119,6 @@ public struct SlashCommand: Sendable, Identifiable, Equatable {
     }
 }
 
-/// What the project can do, read from the running omp.
-public struct Inventory: Sendable, Equatable {
-    public var tools: [String]
-    public var skills: [String]
-    public var extensions: [String]
-    public var prompts: [String]
-    public var commands: Int
-    public var subagents: Int
-
-    public init(tools: [String] = [], skills: [String] = [], extensions: [String] = [], prompts: [String] = [], commands: Int = 0, subagents: Int = 0) {
-        self.tools = tools
-        self.skills = skills
-        self.extensions = extensions
-        self.prompts = prompts
-        self.commands = commands
-        self.subagents = subagents
-    }
-
-    public init?(json: JSONValue) {
-        self.tools = json["tools"].array.compactMap(\.optionalString)
-        self.skills = json["skills"].array.compactMap(\.optionalString)
-        self.extensions = json["extensions"].array.compactMap(\.optionalString)
-        self.prompts = json["prompts"].array.compactMap(\.optionalString)
-        self.commands = json["commands"].int
-        self.subagents = json["subagents"].int
-    }
-}
-
 /// The messages waiting for the agent.
 public struct Queue: Sendable, Equatable {
     public var steering: [String]
