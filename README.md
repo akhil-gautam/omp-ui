@@ -66,6 +66,8 @@ sessions on disk, the most recent one is resumed.
   extension prompt — the request appears and omp waits for your answer.
 - **What the project can do.** The sidebar's *Customizations* list opens the
   project's overview, its tools, its skills, its extensions and its prompts.
+- **Twenty themes.** The picker in the top bar changes the whole interface:
+  a ground, a set of greys and one accent. The choice is remembered.
 - **Live state.** The plan omp is working through, context usage, message
   count and the current model.
 - **Keyboard.** ⌘K focuses the composer, ⌘N adds a project, ⌘1…⌘9 switch

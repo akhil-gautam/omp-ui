@@ -45,26 +45,27 @@ struct TranscriptView: View {
 
 /// The greeting, shown while there is nothing to read.
 struct GreetingView: View {
+    @Environment(\.palette) private var palette
     @Bindable var store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("WHAT ARE WE BUILDING")
                 .font(Theme.label(10))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(palette.accent)
                 .tracking(0.2)
             Text(store.userName.isEmpty ? "What are we building?" : "What are we building, \(store.userName)?")
                 .font(Theme.heading(30))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
             if let session = store.active {
                 Text("omp is ready in \(session.project.name).")
                     .font(Theme.body(13))
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
             } else {
                 Text("Add a project to give omp a place to work.")
                     .font(Theme.body(13))
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,6 +75,7 @@ struct GreetingView: View {
 
 /// One entry of the transcript.
 struct BlockView: View {
+    @Environment(\.palette) private var palette
     let block: Block
 
     var body: some View {
@@ -81,15 +83,11 @@ struct BlockView: View {
         case .user(_, let text):
             Text(Markdown.inline(text))
                 .font(Theme.body(13.5))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(palette.ink)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Theme.hairline, lineWidth: 1)
-                }
+                .background(palette.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .frame(maxWidth: .infinity, alignment: .trailing)
         case .text(_, let text):
             MarkdownView(source: text)
@@ -103,9 +101,9 @@ struct BlockView: View {
                         .font(Theme.label(9))
                         .tracking(0.14)
                 }
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
                 MarkdownView(source: text)
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
             }
         case .tool(_, let name, let args, let output, let isError, let running):
             ToolCallView(name: name, args: args, output: output, isError: isError, running: running)
@@ -115,6 +113,7 @@ struct BlockView: View {
 
 /// A tool call: one line, the way a terminal shows it, opened on demand.
 struct ToolCallView: View {
+    @Environment(\.palette) private var palette
     let name: String
     let args: JSONValue?
     let output: String?
@@ -160,22 +159,22 @@ struct ToolCallView: View {
             } label: {
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(running ? Theme.accent : (isError ? Theme.danger : Theme.inkFaint))
+                        .fill(running ? palette.accent : (isError ? palette.danger : palette.inkFaint))
                         .frame(width: 5, height: 5)
                     Text(name)
                         .font(Theme.code(11.5))
-                        .foregroundStyle(Theme.inkDim)
+                        .foregroundStyle(palette.inkDim)
                     if let summary {
                         Text(summary)
                             .font(Theme.code(11.5))
-                            .foregroundStyle(Theme.inkFaint)
+                            .foregroundStyle(palette.inkFaint)
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(Theme.inkFaint)
+                        .foregroundStyle(palette.inkFaint)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .opacity(hovering || expanded ? 1 : 0)
                 }
@@ -219,6 +218,7 @@ struct EditChange: Equatable {
 
 /// The change, shown as a diff.
 struct EditDiff: View {
+    @Environment(\.palette) private var palette
     let change: EditChange
 
     var body: some View {
@@ -237,32 +237,33 @@ struct EditDiff: View {
             }
         }
         .padding(.vertical, 5)
-        .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(palette.codeBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Theme.hairlineSoft, lineWidth: 1)
+                .stroke(palette.hairlineSoft, lineWidth: 1)
         }
     }
 
     private func colour(for line: DiffLine) -> Color {
         switch line {
-        case .context: Theme.inkDim
-        case .removed: Theme.danger
-        case .added: Theme.success
+        case .context: palette.inkDim
+        case .removed: palette.danger
+        case .added: palette.success
         }
     }
 
     private func background(for line: DiffLine) -> Color {
         switch line {
         case .context: .clear
-        case .removed: Theme.danger.opacity(0.08)
-        case .added: Theme.success.opacity(0.08)
+        case .removed: palette.danger.opacity(0.08)
+        case .added: palette.success.opacity(0.08)
         }
     }
 }
 
 /// A labelled piece of a tool call.
 private struct Labelled: View {
+    @Environment(\.palette) private var palette
     let title: String
     let text: String
 
@@ -270,20 +271,20 @@ private struct Labelled: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
                 .font(Theme.label(9))
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
                 .tracking(0.12)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
                     .font(Theme.code(11.5))
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
                     .textSelection(.enabled)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(palette.codeBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Theme.hairlineSoft, lineWidth: 1)
+                    .stroke(palette.hairlineSoft, lineWidth: 1)
             }
         }
     }

@@ -3,6 +3,7 @@ import OMPCore
 
 /// The composer: the place a message is written.
 struct ComposerView: View {
+    @Environment(\.palette) private var palette
     @Bindable var store: AppStore
     @State private var draft = ""
     @FocusState private var focused: Bool
@@ -28,26 +29,23 @@ struct ComposerView: View {
         HStack(spacing: 8) {
             Text("QUEUED")
                 .font(Theme.label(9))
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
                 .tracking(0.14)
             Text("\(session.queue.count)")
                 .font(Theme.label(9))
-                .foregroundStyle(Theme.inkDim)
+                .foregroundStyle(palette.inkDim)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
-                .background(Theme.raised, in: Capsule())
+                .background(palette.raised, in: Capsule())
             ForEach(session.queue.steering + session.queue.followUp, id: \.self) { message in
                 Text(message)
                     .font(Theme.body(11))
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 3)
-                    .background(Theme.panel, in: Capsule())
-                    .overlay {
-                        Capsule().stroke(Theme.hairlineSoft, lineWidth: 1)
-                    }
+                    .background(palette.panel, in: Capsule())
             }
             Spacer(minLength: 0)
         }
@@ -64,7 +62,7 @@ struct ComposerView: View {
             TextField("Pitch your idea", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(Theme.body(15))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(palette.ink)
                 .lineLimit(1...8)
                 .focused($focused)
                 .frame(minHeight: 44, alignment: .topLeading)
@@ -79,7 +77,7 @@ struct ComposerView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.inkDim)
+                        .foregroundStyle(palette.inkDim)
                         .frame(width: 26, height: 26)
                         .contentShape(Rectangle())
                 }
@@ -93,7 +91,7 @@ struct ComposerView: View {
                 if let usage = session?.contextUsage {
                     Text("\(Int((100 - usage.percent).rounded()))% left")
                         .font(Theme.body(11))
-                        .foregroundStyle(Theme.inkFaint)
+                        .foregroundStyle(palette.inkFaint)
                         .monospacedDigit()
                         .padding(.leading, 4)
                         .help("Context left in this session")
@@ -104,9 +102,9 @@ struct ComposerView: View {
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.ground)
+                        .foregroundStyle(palette.ground)
                         .frame(width: 28, height: 28)
-                        .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Theme.raised : Theme.accent, in: Circle())
+                        .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? palette.raised : palette.accent, in: Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -120,9 +118,9 @@ struct ComposerView: View {
                     } label: {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Theme.ink)
+                            .foregroundStyle(palette.ink)
                             .frame(width: 28, height: 28)
-                            .background(Theme.raised, in: Circle())
+                            .background(palette.raised, in: Circle())
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -135,10 +133,10 @@ struct ComposerView: View {
         .padding(.top, 12)
         .padding(.bottom, 12)
         .frame(maxWidth: Theme.contentWidth)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(focused ? Theme.accentLine : Theme.hairline, lineWidth: 1)
+                .stroke(focused ? palette.accentLine : palette.hairline, lineWidth: 1)
         }
     }
 
@@ -190,7 +188,7 @@ struct ComposerView: View {
             if let approval = store.approvalLabel {
                 Text(approval)
                     .font(Theme.body(11.5))
-                    .foregroundStyle(Theme.inkFaint)
+                    .foregroundStyle(palette.inkFaint)
             }
             Spacer(minLength: 0)
 
@@ -201,7 +199,7 @@ struct ComposerView: View {
                     Text(branch)
                         .font(Theme.body(11.5))
                 }
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
             }
         }
         .frame(maxWidth: Theme.contentWidth)

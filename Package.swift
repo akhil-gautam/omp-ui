@@ -12,5 +12,6 @@ let package = Package(
         .target(name: "OMPCore"),
         .executableTarget(name: "OMPApp", dependencies: ["OMPCore"]),
         .testTarget(name: "OMPCoreTests", dependencies: ["OMPCore"]),
+        .testTarget(name: "OMPAppTests", dependencies: ["OMPApp"]),
     ]
 )

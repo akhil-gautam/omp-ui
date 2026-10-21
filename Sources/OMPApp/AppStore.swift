@@ -82,8 +82,14 @@ public final class AppStore {
     public var isLoading = true
     /// The reader's name, for the greeting.
     public var userName: String = NSFullUserName()
-    /// Whether the light appearance is on.
-    public var isLight = false
+    /// The name of the chosen theme.
+    public var themeName: String = UserDefaults.standard.string(forKey: "omp-ui.theme") ?? "Void" {
+        didSet { UserDefaults.standard.set(themeName, forKey: "omp-ui.theme") }
+    }
+    /// The colours the interface is drawn with.
+    public var palette: Palette { Theme.palette(named: themeName) }
+    /// Whether the sidebar is shown.
+    public var sidebarOpen = true
 
     @ObservationIgnored private let store: ProjectStore
     @ObservationIgnored private let executable: String?

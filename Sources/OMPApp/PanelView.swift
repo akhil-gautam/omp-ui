@@ -3,6 +3,7 @@ import OMPCore
 
 /// The pages behind the sidebar's customizations.
 struct PanelView: View {
+    @Environment(\.palette) private var palette
     @Bindable var store: AppStore
 
     var body: some View {
@@ -10,7 +11,7 @@ struct PanelView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text(store.view.title.uppercased())
                     .font(Theme.label(10))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(palette.accent)
                     .tracking(0.2)
 
                 switch store.view {
@@ -55,21 +56,21 @@ struct PanelView: View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(label)
                 .font(Theme.label(9.5))
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
                 .tracking(0.12)
                 .frame(width: 120, alignment: .leading)
             Text(value)
                 .font(Theme.body(13))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(palette.ink)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Theme.hairlineSoft, lineWidth: 1)
+                .stroke(palette.hairlineSoft, lineWidth: 1)
         }
     }
 
@@ -78,13 +79,13 @@ struct PanelView: View {
         if items.isEmpty {
             Text(empty)
                 .font(Theme.body(13))
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
         } else {
             VStack(alignment: .leading, spacing: 1) {
                 ForEach(items, id: \.self) { item in
                     Text(item)
                         .font(Theme.code(12.5))
-                        .foregroundStyle(Theme.inkDim)
+                        .foregroundStyle(palette.inkDim)
                         .padding(.horizontal, 2)
                         .padding(.vertical, 3)
                         .textSelection(.enabled)
@@ -96,6 +97,7 @@ struct PanelView: View {
 
 /// A dialog the agent is waiting on.
 struct DialogView: View {
+    @Environment(\.palette) private var palette
     let request: UIRequest
     @Bindable var store: AppStore
     @State private var text = ""
@@ -104,13 +106,13 @@ struct DialogView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text((request.title ?? "omp needs an answer").uppercased())
                 .font(Theme.label(10))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(palette.accent)
                 .tracking(0.18)
 
             if let message = request.message, !message.isEmpty {
                 Text(message)
                     .font(Theme.body(13))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(palette.ink)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -124,20 +126,20 @@ struct DialogView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(option.label)
                                     .font(Theme.body(13))
-                                    .foregroundStyle(Theme.ink)
+                                    .foregroundStyle(palette.ink)
                                 if let description = option.description {
                                     Text(description)
                                         .font(Theme.body(11.5))
-                                        .foregroundStyle(Theme.inkFaint)
+                                        .foregroundStyle(palette.inkFaint)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
-                            .background(Theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(palette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Theme.hairline, lineWidth: 1)
+                                    .stroke(palette.hairline, lineWidth: 1)
                             }
                         }
                         .buttonStyle(.plain)
@@ -145,63 +147,73 @@ struct DialogView: View {
                 }
             } else if request.method == "confirm" {
                 HStack(spacing: 8) {
-                    Button("Yes") { Task { await store.answer(request, value: "yes") } }
-                        .buttonStyle(ConfirmButton(tone: Theme.accent))
-                    Button("No") { Task { await store.answer(request, value: "no") } }
-                        .buttonStyle(ConfirmButton(tone: Theme.inkDim))
+                    ConfirmButton(title: "Yes", tone: palette.accent) {
+                        Task { await store.answer(request, value: "yes") }
+                    }
+                    ConfirmButton(title: "No", tone: palette.inkDim) {
+                        Task { await store.answer(request, value: "no") }
+                    }
                 }
             } else if request.method == "input" || request.method == "editor" {
                 TextField(request.placeholder ?? "Your answer", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(Theme.body(13))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(palette.ink)
                     .lineLimit(1...8)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
-                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(palette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Theme.hairline, lineWidth: 1)
+                            .stroke(palette.hairline, lineWidth: 1)
                     }
-                Button("Send") { Task { await store.answer(request, value: text) } }
-                    .buttonStyle(ConfirmButton(tone: Theme.accent))
+                ConfirmButton(title: "Send", tone: palette.accent) {
+                    Task { await store.answer(request, value: text) }
+                }
             } else if request.method == "open_url", let url = request.launchURL {
                 Text(url)
                     .font(Theme.code(12))
-                    .foregroundStyle(Theme.inkDim)
+                    .foregroundStyle(palette.inkDim)
                     .textSelection(.enabled)
-                Button("Dismiss") { Task { await store.answer(request, value: "", cancelled: true) } }
-                    .buttonStyle(ConfirmButton(tone: Theme.inkDim))
+                ConfirmButton(title: "Dismiss", tone: palette.inkDim) {
+                    Task { await store.answer(request, value: "", cancelled: true) }
+                }
             }
 
-            Button("Cancel") { Task { await store.answer(request, value: "", cancelled: true) } }
-                .buttonStyle(ConfirmButton(tone: Theme.inkFaint))
+            ConfirmButton(title: "Cancel", tone: palette.inkFaint) {
+                Task { await store.answer(request, value: "", cancelled: true) }
+            }
         }
         .padding(18)
         .frame(maxWidth: 520, alignment: .leading)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Theme.hairline, lineWidth: 1)
+                .stroke(palette.hairline, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.5), radius: 30, y: 12)
     }
 }
 
 /// A plain button in the dialog's colours.
-struct ConfirmButton: ButtonStyle {
-    var tone: Color
+struct ConfirmButton: View {
+    let title: String
+    let tone: Color
+    let action: () -> Void
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Theme.body(12.5))
-            .foregroundStyle(tone)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Theme.raised.opacity(configuration.isPressed ? 1 : 0.7), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(Theme.hairline, lineWidth: 1)
-            }
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.body(12.5))
+                .foregroundStyle(tone)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(palette.raised, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
     }
 }

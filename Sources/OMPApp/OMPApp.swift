@@ -8,7 +8,9 @@ struct OMPApp: App {
         Window("omp-ui", id: "main") {
             ContentView(store: store)
                 .frame(minWidth: 900, minHeight: 600)
-                .preferredColorScheme(.dark)
+                // The system draws the fields and the popovers, so it has to
+                // agree with the theme.
+                .preferredColorScheme(store.palette.isLight ? .light : .dark)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)

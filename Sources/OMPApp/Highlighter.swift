@@ -7,7 +7,7 @@ import SwiftUI
 /// with the words coloured when the language says they are keywords. It is
 /// small, has no dependencies, and does not recurse.
 public enum Highlighter {
-    public struct Palette: Sendable {
+    public struct CodePalette: Sendable {
         public var plain: Color
         public var keyword: Color
         public var string: Color
@@ -28,7 +28,7 @@ public enum Highlighter {
     }
 
     /// The colours the interface uses for code.
-    public static let darkPalette = Palette(
+    public static let darkPalette = CodePalette(
         plain: Color(hex: 0xD6D6DA),
         keyword: Color(hex: 0xED4FA6),
         string: Color(hex: 0x9BD48A),
@@ -39,7 +39,7 @@ public enum Highlighter {
     )
 
     /// Colours a piece of code.
-    public static func attributed(_ code: String, language: String?, palette: Palette) -> AttributedString {
+    public static func attributed(_ code: String, language: String?, palette: CodePalette) -> AttributedString {
         var result = AttributedString(code)
         let keywords = keywordSet(for: language)
         let types = typeSet(for: language)

@@ -3,6 +3,7 @@ import OMPCore
 
 /// Markdown, rendered.
 struct MarkdownView: View {
+    @Environment(\.palette) private var palette
     let source: String
 
     var body: some View {
@@ -12,12 +13,12 @@ struct MarkdownView: View {
                 case .heading(_, let level, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.heading(level <= 2 ? 19 : 15))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(palette.ink)
                         .padding(.top, level <= 2 ? 8 : 2)
                 case .paragraph(_, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(palette.ink)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 case .code(_, let language, let text):
@@ -27,14 +28,14 @@ struct MarkdownView: View {
                 case .quote(_, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(Theme.inkDim)
+                        .foregroundStyle(palette.inkDim)
                         .textSelection(.enabled)
                         .padding(.leading, 12)
                         .overlay(alignment: .leading) {
-                            Rectangle().fill(Theme.accent.opacity(0.5)).frame(width: 2)
+                            Rectangle().fill(palette.accent.opacity(0.5)).frame(width: 2)
                         }
                 case .rule:
-                    Rectangle().fill(Theme.hairlineSoft).frame(height: 1)
+                    Rectangle().fill(palette.hairlineSoft).frame(height: 1)
                 case .table(_, let header, let rows):
                     TableBlock(header: header, rows: rows)
                 }
@@ -46,6 +47,7 @@ struct MarkdownView: View {
 
 /// A fenced block of code.
 struct CodeBlock: View {
+    @Environment(\.palette) private var palette
     let language: String?
     let text: String
     @State private var copied = false
@@ -55,7 +57,7 @@ struct CodeBlock: View {
             HStack(spacing: 8) {
                 Text(language?.uppercased() ?? "CODE")
                     .font(Theme.label(9))
-                    .foregroundStyle(Theme.inkFaint)
+                    .foregroundStyle(palette.inkFaint)
                     .tracking(0.12)
                 Spacer(minLength: 0)
                 Button {
@@ -69,7 +71,7 @@ struct CodeBlock: View {
                 } label: {
                     Text(copied ? "COPIED" : "COPY")
                         .font(Theme.label(9))
-                        .foregroundStyle(copied ? Theme.accent : Theme.inkFaint)
+                        .foregroundStyle(copied ? palette.accent : palette.inkFaint)
                         .tracking(0.12)
                 }
                 .buttonStyle(.plain)
@@ -77,7 +79,7 @@ struct CodeBlock: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.hairlineSoft).frame(height: 1)
+                Rectangle().fill(palette.hairlineSoft).frame(height: 1)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -87,16 +89,17 @@ struct CodeBlock: View {
                     .padding(12)
             }
         }
-        .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(palette.codeBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Theme.hairlineSoft, lineWidth: 1)
+                .stroke(palette.hairlineSoft, lineWidth: 1)
         }
     }
 }
 
 /// A list, with the task-list entries marked.
 struct ListBlock: View {
+    @Environment(\.palette) private var palette
     let ordered: Bool
     let items: [MarkdownItem]
 
@@ -107,16 +110,16 @@ struct ListBlock: View {
                     if let checked = item.checked {
                         Image(systemName: checked ? "checkmark.square.fill" : "square")
                             .font(.system(size: 12))
-                            .foregroundStyle(checked ? Theme.accent : Theme.inkFaint)
+                            .foregroundStyle(checked ? palette.accent : palette.inkFaint)
                     } else {
                         Text(ordered ? "\(index + 1)." : "•")
                             .font(Theme.body(13))
-                            .foregroundStyle(Theme.inkFaint)
+                            .foregroundStyle(palette.inkFaint)
                             .monospacedDigit()
                     }
                     Text(Markdown.inline(item.text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(palette.ink)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -127,6 +130,7 @@ struct ListBlock: View {
 
 /// A table.
 struct TableBlock: View {
+    @Environment(\.palette) private var palette
     let header: [String]
     let rows: [[String]]
 
@@ -139,13 +143,13 @@ struct TableBlock: View {
                 }
             }
             .overlay {
-                Rectangle().fill(Theme.hairlineSoft).frame(width: 1)
+                Rectangle().fill(palette.hairlineSoft).frame(width: 1)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Theme.hairlineSoft, lineWidth: 1)
+                .stroke(palette.hairlineSoft, lineWidth: 1)
         }
     }
 
@@ -154,18 +158,18 @@ struct TableBlock: View {
             ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
                 Text(Markdown.inline(cell))
                     .font(isHeader ? Theme.body(12.5) : Theme.body(12.5))
-                    .foregroundStyle(isHeader ? Theme.ink : Theme.inkDim)
+                    .foregroundStyle(isHeader ? palette.ink : palette.inkDim)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .overlay(alignment: .trailing) {
-                        Rectangle().fill(Theme.hairlineSoft).frame(width: 1)
+                        Rectangle().fill(palette.hairlineSoft).frame(width: 1)
                     }
             }
             Spacer(minLength: 0)
         }
-        .background(isHeader ? Theme.panel : .clear)
+        .background(isHeader ? palette.panel : .clear)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Theme.hairlineSoft).frame(height: 1)
+            Rectangle().fill(palette.hairlineSoft).frame(height: 1)
         }
     }
 }

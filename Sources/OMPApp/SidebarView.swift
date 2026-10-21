@@ -3,6 +3,7 @@ import OMPCore
 
 /// The list of projects, and what each project can do.
 struct SidebarView: View {
+    @Environment(\.palette) private var palette
     @Bindable var store: AppStore
 
     var body: some View {
@@ -18,7 +19,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("CUSTOMIZATIONS")
                     .font(Theme.label(9.5))
-                    .foregroundStyle(Theme.inkFaint)
+                    .foregroundStyle(palette.inkFaint)
                     .tracking(0.14)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 8)
@@ -27,9 +28,9 @@ struct SidebarView: View {
             .padding(.bottom, 14)
         }
         .frame(width: Theme.sidebarWidth)
-        .background(Theme.ground)
+        .background(palette.ground)
         .overlay(alignment: .trailing) {
-            Rectangle().fill(Theme.hairlineSoft).frame(width: 1)
+            Rectangle().fill(palette.hairlineSoft).frame(width: 1)
         }
     }
 
@@ -37,7 +38,7 @@ struct SidebarView: View {
         HStack(spacing: 8) {
             Text("SESSIONS")
                 .font(Theme.label(9.5))
-                .foregroundStyle(Theme.inkFaint)
+                .foregroundStyle(palette.inkFaint)
                 .tracking(0.14)
             Spacer(minLength: 8)
             Button {
@@ -48,14 +49,14 @@ struct SidebarView: View {
                         .font(Theme.label(9.5))
                     Text("⌘N")
                         .font(Theme.label(9))
-                        .foregroundStyle(Theme.inkFaint)
+                        .foregroundStyle(palette.inkFaint)
                 }
-                .foregroundStyle(Theme.inkDim)
+                .foregroundStyle(palette.inkDim)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
                 .overlay {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(Theme.hairline, lineWidth: 1)
+                        .stroke(palette.hairline, lineWidth: 1)
                 }
             }
             .buttonStyle(.plain)
@@ -71,7 +72,7 @@ struct SidebarView: View {
             if store.projects.isEmpty {
                 Text("No projects yet.")
                     .font(Theme.body(12))
-                    .foregroundStyle(Theme.inkFaint)
+                    .foregroundStyle(palette.inkFaint)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 4)
             }
@@ -110,6 +111,7 @@ struct SidebarView: View {
 
 /// One project in the list.
 private struct ProjectRow: View {
+    @Environment(\.palette) private var palette
     let project: Project
     let status: SessionStatus
     let isActive: Bool
@@ -125,7 +127,7 @@ private struct ProjectRow: View {
                 .frame(width: 6, height: 6)
             Text(project.name)
                 .font(Theme.body(12.5))
-                .foregroundStyle(isActive ? Theme.ink : Theme.inkDim)
+                .foregroundStyle(isActive ? palette.ink : palette.inkDim)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
@@ -133,7 +135,7 @@ private struct ProjectRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Theme.inkFaint)
+                        .foregroundStyle(palette.inkFaint)
                 }
                 .buttonStyle(.plain)
                 .help("Remove this project")
@@ -143,7 +145,7 @@ private struct ProjectRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(isActive ? Theme.raised : (hovering ? Theme.panel : .clear))
+                .fill(isActive ? palette.raised : (hovering ? palette.panel : .clear))
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
@@ -152,17 +154,18 @@ private struct ProjectRow: View {
 
     private var colour: Color {
         switch status {
-        case .busy: Theme.accent
-        case .idle: Theme.success
-        case .starting: Theme.accent.opacity(0.6)
-        case .error: Theme.danger
-        case .stopped: Theme.inkFaint
+        case .busy: palette.accent
+        case .idle: palette.success
+        case .starting: palette.accent.opacity(0.6)
+        case .error: palette.danger
+        case .stopped: palette.inkFaint
         }
     }
 }
 
 /// One of the project's pages.
 private struct CustomizationRow: View {
+    @Environment(\.palette) private var palette
     let title: String
     let count: Int?
     let isActive: Bool
@@ -175,24 +178,24 @@ private struct CustomizationRow: View {
             HStack(spacing: 8) {
                 Text(title)
                     .font(Theme.body(12.5))
-                    .foregroundStyle(isActive ? Theme.ink : Theme.inkDim)
+                    .foregroundStyle(isActive ? palette.ink : palette.inkDim)
                 Spacer(minLength: 4)
                 if let count {
                     Text("\(count)")
                         .font(Theme.body(11))
-                        .foregroundStyle(Theme.inkFaint)
+                        .foregroundStyle(palette.inkFaint)
                 }
                 if isActive {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(palette.accent)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? Theme.raised : (hovering ? Theme.panel : .clear))
+                    .fill(isActive ? palette.raised : (hovering ? palette.panel : .clear))
             )
             .contentShape(Rectangle())
         }
