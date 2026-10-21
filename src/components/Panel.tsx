@@ -1,7 +1,7 @@
 import type { Inventory } from "../schema";
 import type { Workspace } from "../store";
 import { IconFolder, IconMessage, IconWrench } from "./Icons";
-import { modeLabel, type SessionMode } from "./ModeMenu";
+import { approvalLabel, modeLabel, type SessionMode } from "./ModeMenu";
 
 type Props = {
 	view: string;
@@ -27,7 +27,7 @@ export default function Panel({ view, workspace, inventory, branch, mode, approv
 					<Fact label="Model" value={state?.model?.name ?? state?.model?.id ?? "—"} />
 					<Fact label="Session" value={state?.sessionName ?? state?.sessionId ?? "—"} />
 					<Fact label="Mode" value={modeLabel(mode)} />
-					<Fact label="Permissions" value={approval ?? "omp's default"} />
+					<Fact label="Permissions" value={approvalLabel(approval) ?? "omp's default"} />
 					<Fact label="Messages" value={String(state?.messageCount ?? 0)} />
 					<Fact
 						label="Context"

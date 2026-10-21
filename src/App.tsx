@@ -29,7 +29,8 @@ export default function App() {
 		if (stored === "light" || stored === "dark") {
 			return stored;
 		}
-		return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+		// The interface is dark by default; the rail toggles the other one.
+		return "dark";
 	});
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [view, setView] = useState<View>("transcript");

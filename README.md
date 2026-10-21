@@ -37,7 +37,14 @@ npm run tauri dev      # development, with hot reload
 npm run tauri build    # a .app / .dmg in src-tauri/target/release/bundle
 ```
 
-The first launch shows an empty state. Use **+** in the sidebar to add a
+Or install the release:
+
+```sh
+brew tap akhil-gautam/tap
+brew install --cask akhil-gautam/tap/omp-ui
+```
+
+The first launch shows an empty state. Use **New** in the sidebar to add a
 project directory; omp then starts on that directory and, if the project has
 sessions on disk, the most recent one is resumed.
 
@@ -54,24 +61,34 @@ sessions on disk, the most recent one is resumed.
   Enter queues a follow-up and ⌘Enter steers into the running turn; **Stop**
   aborts it. Typing `/` offers omp's own command catalogue, with each
   command's arguments and where it comes from.
+- **Session mode.** The chip beside the composer switches between
+  *Interactive* — one message at a time, and you can steer straight away — and
+  *Autopilot*, which lets omp queue everything and finish what it started
+  before taking its next turn. It drives omp's own steering, follow-up and
+  interrupt modes.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt, a login link — the request appears as a modal and omp
   waits for your answer.
-- **Controls.** A searchable model picker, thinking level, `/compact`, a new
-  session, and a picker for the project's previous sessions.
+- **Controls.** The model, the thinking level, the session mode and the
+  context balance sit in the composer; the top bar starts a new session,
+  stops the project's omp, and steps back and forth through the project's
+  session history.
+- **What the project can do.** The sidebar's *Customizations* list opens the
+  project's overview, its tools, its skills, its extensions and its prompts —
+  all read from the running omp.
 - **Live state.** The plan omp is working through, context usage, message
   count, tokens per second, queued messages, and subagent activity.
 - **Keyboard.** ⌘K focuses the composer, ⌘N adds a project, ⌘1…⌘9 switch
   between projects.
-- **Themes.** Follows the system appearance, with a toggle in the sidebar.
+- **Themes.** Dark by default, with a toggle at the foot of the icon rail.
 
 ## Memory
 
 The app shell is small: a release build is a few tens of megabytes, plus the
 system webview. The real cost is omp itself — one `omp` process per open
-project, roughly 200 MB each. **stop** in the header ends a project's omp
-process and gives that memory back; opening the project again resumes its
-session from disk.
+project, roughly 200 MB each. The stop button in the top bar ends a
+project's omp process and gives that memory back; opening the project again
+resumes its session from disk.
 
 ## Layout
 
@@ -81,6 +98,7 @@ session from disk.
 | `src-tauri/src/protocol.rs` | Translates omp's RPC frames into the UI's event vocabulary. |
 | `src-tauri/src/sessions.rs` | Finds the session files that belong to a project. |
 | `src-tauri/src/omp_bin.rs` | Finds the `omp` executable and builds a PATH that can run it. |
+| `src-tauri/src/project.rs` | The facts the chrome shows about a project: its git branch, the user, omp's approval mode. |
 | `src-tauri/capabilities/` | What the window is allowed to do: listen for events, open the folder picker, open a login link. |
 | `src/markdown.ts` | Markdown, syntax highlighting and sanitisation for replies. |
 | `src/commands.ts` | Matching for the composer's slash-command menu. |

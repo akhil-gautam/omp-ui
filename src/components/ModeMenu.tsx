@@ -22,6 +22,17 @@ const MODES: { value: SessionMode; label: string; hint: string; icon: React.Reac
 export const modeLabel = (mode: SessionMode) =>
 	mode === "autopilot" ? "Autopilot" : "Interactive";
 
+const APPROVAL_LABELS: Record<string, string> = {
+	"always-ask": "Manual",
+	"always-ask-cached": "Manual, remembered",
+	write: "Writes only",
+	yolo: "Automatic",
+};
+
+/** How omp's configured approval mode reads in the interface. */
+export const approvalLabel = (mode: string | null) =>
+	mode ? (APPROVAL_LABELS[mode] ?? mode) : null;
+
 type Props = {
 	mode: SessionMode;
 	onChange: (mode: SessionMode) => void;
@@ -70,7 +81,7 @@ export default function ModeMenu({ mode, onChange, approval }: Props) {
 						<IconGear />
 						Permissions
 					</span>
-					<span className="menu-row-value">{approval ?? "omp's default"}</span>
+					<span className="menu-row-value">{approvalLabel(approval) ?? "omp's default"}</span>
 				</div>
 			</div>
 		</Popover>

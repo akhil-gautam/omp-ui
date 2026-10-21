@@ -25,4 +25,7 @@ omp-rpc = { path = "../vendor/omp-rpc" }
 tempfile = "3"
 
 [features]
-default = []
+# Without this the release build is treated as a development build: it
+# loads the frontend from the dev server and embeds nothing.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -4,7 +4,7 @@ import { matchCommands, type CommandMatch } from "../commands";
 import type { ModelListEntry, Project } from "../schema";
 import type { Workspace } from "../store";
 import { IconArrowUp, IconBolt, IconChevronDown, IconFolder, IconGitBranch, IconMessage, IconMic, IconPlus, IconStop } from "./Icons";
-import ModeMenu, { modeLabel, type SessionMode } from "./ModeMenu";
+import ModeMenu, { approvalLabel, modeLabel, type SessionMode } from "./ModeMenu";
 import Popover from "./Popover";
 import SlashMenu from "./SlashMenu";
 
@@ -47,13 +47,6 @@ const THINKING_LEVELS: { value: string; label: string }[] = [
 	{ value: "xhigh", label: "Extra high" },
 	{ value: "max", label: "Max" },
 ];
-
-const APPROVAL_LABELS: Record<string, string> = {
-	"always-ask": "Manual",
-	"always-ask-cached": "Manual, remembered",
-	write: "Writes only",
-	yolo: "Automatic",
-};
 
 export default function Composer({
 	workspace,
@@ -161,9 +154,7 @@ export default function Composer({
 		THINKING_LEVELS.find((level) => level.value === chrome.thinking)?.label ?? chrome.thinking;
 	const used = state?.contextUsage?.percent;
 	const balance = used === undefined ? null : Math.max(0, Math.round(100 - used));
-	const approval = chrome.approval
-		? (APPROVAL_LABELS[chrome.approval] ?? chrome.approval)
-		: null;
+	const approval = approvalLabel(chrome.approval);
 
 	return (
 		<div className="composer">
