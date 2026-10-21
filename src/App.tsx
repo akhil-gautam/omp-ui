@@ -46,6 +46,13 @@ export default function App() {
 	const [suggestion, setSuggestion] = useState<string | null>(null);
 	const onSuggestionApplied = useCallback(() => setSuggestion(null), []);
 
+	// The session mode has to be known when a project opens, but opening a
+	// project must not depend on it — a ref keeps that one-way.
+	const modeRef = useRef(mode);
+	useEffect(() => {
+		modeRef.current = mode;
+	}, [mode]);
+
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
 		localStorage.setItem(THEME_KEY, theme);
@@ -88,6 +95,9 @@ export default function App() {
 		try {
 			const result = await api.openProject(id);
 			dispatch({ type: "open", result });
+			// omp starts in its own configuration's queue modes; the mode the
+			// app shows has to be the mode omp is actually in.
+			await api.setSessionMode(id, modeRef.current);
 		} catch (error) {
 			setBanner(String(error));
 		}

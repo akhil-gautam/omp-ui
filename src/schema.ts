@@ -79,6 +79,12 @@ export const sessionStateSchema = z.object({
 	isStreaming: z.boolean().default(false),
 	isCompacting: z.boolean().default(false),
 	isSettled: z.boolean().default(true),
+	/** How queued steering messages are delivered. */
+	steeringMode: z.enum(["all", "one-at-a-time"]).nullish(),
+	/** How queued follow-up messages are delivered. */
+	followUpMode: z.enum(["all", "one-at-a-time"]).nullish(),
+	/** Whether a steer interrupts the running turn. */
+	interruptMode: z.enum(["immediate", "wait"]).nullish(),
 	messageCount: z.number().default(0),
 	queuedMessageCount: z.number().default(0),
 	/** Null while nothing is streaming. */

@@ -65,14 +65,18 @@ sessions on disk, the most recent one is resumed.
   button. Thinking is folded away; runs of tool calls collapse into one row
   that expands into the exact arguments and results omp saw.
 - **Composer.** Enter sends, Shift+Enter adds a line. While a turn is running
-  Enter queues a follow-up and ⌘Enter steers into the running turn; **Stop**
-  aborts it. Typing `/` offers omp's own command catalogue, with each
-  command's arguments and where it comes from.
+  Enter queues a follow-up and ⌘Enter steers into the running turn; the send
+  button stays there, so a second and a third message can be queued as well,
+  and the queue is listed above the composer. **Stop** aborts the turn.
+  Typing `/` offers omp's own command catalogue, with each command's
+  arguments and where it comes from.
 - **Session mode.** The chip beside the composer switches between
-  *Interactive* — one message at a time, and you can steer straight away — and
-  *Autopilot*, which lets omp queue everything and finish what it started
-  before taking its next turn. It drives omp's own steering, follow-up and
-  interrupt modes.
+  *Interactive* — a steer lands on the running turn at once — and *Autopilot*,
+  which lets the turn finish first. Either way the messages you send while
+  the agent works wait in the queue, and the queue holds all of them: send a
+  second and a third and none of them is lost. It drives omp's own steering,
+  follow-up and interrupt modes, and the app applies it to omp when a project
+  opens.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt, a login link — the request appears as a modal and omp
   waits for your answer.

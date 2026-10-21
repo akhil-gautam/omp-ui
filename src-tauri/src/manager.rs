@@ -333,20 +333,21 @@ impl Manager {
 
 	/// How the session behaves.
 	///
-	/// `interactive` takes one message at a time and lets the reader steer
-	/// straight away; `autopilot` queues everything and lets side-effecting
-	/// work finish before omp takes its next turn.
+	/// `interactive` lets a steer land on the running turn straight away;
+	/// `autopilot` lets the turn finish first. Either way the messages the
+	/// reader sends while the agent works wait in the queue — all of them,
+	/// so a second and a third message are not lost.
 	pub fn set_session_mode(&self, id: &str, mode: &str) -> Result<(), String> {
 		let client = self.client(id)?;
-		let (queue, interrupt) = match mode {
+		let (steering, interrupt) = match mode {
 			"autopilot" => (QueueMode::All, InterruptMode::Wait),
 			_ => (QueueMode::OneAtATime, InterruptMode::Immediate),
 		};
 		client
-			.call(&SetSteeringModeCommand { mode: queue })
+			.call(&SetSteeringModeCommand { mode: steering })
 			.map_err(|error| error.to_string())?;
 		client
-			.call(&SetFollowUpModeCommand { mode: queue })
+			.call(&SetFollowUpModeCommand { mode: QueueMode::All })
 			.map_err(|error| error.to_string())?;
 		client
 			.call(&SetInterruptModeCommand { mode: interrupt })

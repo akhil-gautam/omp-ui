@@ -8,13 +8,13 @@ const MODES: { value: SessionMode; label: string; hint: string; icon: React.Reac
 	{
 		value: "interactive",
 		label: "Interactive",
-		hint: "One message at a time, and you can steer at once",
+		hint: "A steer lands on the running turn; messages queue up",
 		icon: <IconMessage />,
 	},
 	{
 		value: "autopilot",
 		label: "Autopilot",
-		hint: "Keeps going without waiting for you",
+		hint: "The agent finishes what it is doing first; messages queue up",
 		icon: <IconBolt />,
 	},
 ];

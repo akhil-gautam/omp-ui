@@ -160,6 +160,12 @@ export default function Composer({
 		<div className="composer">
 			{queue.steering.length > 0 || queue.followUp.length > 0 ? (
 				<div className="queue-chips">
+					<span className="queue-label">
+						Queued
+						<span className="queue-count">
+							{queue.steering.length + queue.followUp.length}
+						</span>
+					</span>
 					{queue.steering.map((text, index) => (
 						<span className="chip" key={`steering-${index}`}>
 							{text}
@@ -306,21 +312,21 @@ export default function Composer({
 						<IconMic />
 					</button>
 
+					<button
+						className="send"
+						onClick={() => submit()}
+						disabled={draft.trim().length === 0}
+						title={busy ? "Queue this message" : "Send"}
+						aria-label={busy ? "Queue this message" : "Send"}
+					>
+						<IconArrowUp />
+					</button>
+
 					{busy ? (
 						<button className="send stop" onClick={onAbort} title="Stop" aria-label="Stop">
 							<IconStop />
 						</button>
-					) : (
-						<button
-							className="send"
-							onClick={() => submit()}
-							disabled={draft.trim().length === 0}
-							title="Send"
-							aria-label="Send"
-						>
-							<IconArrowUp />
-						</button>
-					)}
+					) : null}
 				</div>
 			</div>
 

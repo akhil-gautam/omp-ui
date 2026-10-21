@@ -98,12 +98,21 @@ fn the_inventory_lists_what_the_project_has() {
 }
 
 #[test]
-fn a_session_can_be_told_to_run_without_waiting() {
+fn the_session_mode_is_the_mode_omp_is_in() {
 	let temp = tempfile::tempdir().expect("a temp dir");
 	let manager = manager(temp.path());
 	let project = manager.add(temp.path().to_str().expect("a utf-8 path")).expect("the project is added");
 	manager.open(&project.id).expect("the project opens");
 
 	manager.set_session_mode(&project.id, "autopilot").expect("autopilot is set");
+	let state = manager.refresh_state(&project.id).expect("the state is readable");
+	assert_eq!(state["steeringMode"], "all", "autopilot keeps every steer: {state}");
+	assert_eq!(state["followUpMode"], "all", "autopilot keeps every message: {state}");
+	assert_eq!(state["interruptMode"], "wait", "autopilot lets the turn finish: {state}");
+
 	manager.set_session_mode(&project.id, "interactive").expect("interactive is set");
+	let state = manager.refresh_state(&project.id).expect("the state is readable");
+	assert_eq!(state["steeringMode"], "one-at-a-time", "interactive takes the last steer: {state}");
+	assert_eq!(state["followUpMode"], "all", "interactive still queues every message: {state}");
+	assert_eq!(state["interruptMode"], "immediate", "interactive lands a steer at once: {state}");
 }
