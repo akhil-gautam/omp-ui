@@ -1,111 +1,188 @@
 import SwiftUI
 import OMPCore
 
-/// The list of projects, and what each project can do.
+/// The rail: the projects at the top, the open project's own pages at the
+/// foot.
 struct SidebarView: View {
     @Environment(\.palette) private var palette
     @Bindable var store: AppStore
+    @State private var query = ""
+
+    private var shown: [Project] {
+        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return store.projects }
+        return store.projects.filter { $0.name.lowercased().contains(needle) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                header
-                projectList
+                newProject
+                sessions
+                search
+                list
             }
-            .padding(.top, 18)
+            .padding(.top, 34)
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 0) {
-                Text("CUSTOMIZATIONS")
-                    .font(Theme.label(9.5))
-                    .foregroundStyle(palette.inkFaint)
-                    .tracking(0.14)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
-                customizations
-            }
-            .padding(.bottom, 14)
+            customizations
         }
         .frame(width: Theme.sidebarWidth)
-        .background(palette.ground)
+        .background(palette.panel)
         .overlay(alignment: .trailing) {
-            Rectangle().fill(palette.hairlineSoft).frame(width: 1)
+            Rectangle().fill(palette.hairline).frame(width: 1)
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("SESSIONS")
-                .font(Theme.label(9.5))
+    // MARK: - The top
+
+    private var newProject: some View {
+        Button {
+            Task { await store.addProjectPicker() }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .medium))
+                Text("New project")
+                    .font(.system(size: 14))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help("Add a project (⌘N)")
+    }
+
+    private var sessions: some View {
+        Button {
+            store.view = .transcript
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 13))
+                Text("Sessions")
+                    .font(.system(size: 14))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help("The conversation with each agent")
+    }
+
+    private var search: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
                 .foregroundStyle(palette.inkFaint)
-                .tracking(0.14)
-            Spacer(minLength: 8)
-            Button {
-                Task { await store.addProjectPicker() }
-            } label: {
-                HStack(spacing: 5) {
-                    Text("NEW")
-                        .font(Theme.label(9.5))
-                    Text("⌘N")
-                        .font(Theme.label(9))
+            TextField("Search projects", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13.5))
+                .foregroundStyle(palette.ink)
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(palette.inkFaint)
                 }
-                .foregroundStyle(palette.inkDim)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(palette.hairline, lineWidth: 1)
-                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Clear the search")
             }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .help("Add a project (⌘N)")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
         .padding(.bottom, 10)
     }
 
-    private var projectList: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            if store.projects.isEmpty {
-                Text("No projects yet.")
-                    .font(Theme.body(12))
-                    .foregroundStyle(palette.inkFaint)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 4)
+    private var list: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                if shown.isEmpty {
+                    Text(query.isEmpty ? "No projects yet." : "Nothing matches.")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(palette.inkFaint)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                }
+                ForEach(shown) { project in
+                    ProjectRow(
+                        project: project,
+                        status: store.sessions[project.id]?.status ?? .stopped,
+                        isActive: store.activeID == project.id,
+                        onOpen: { Task { await store.open(project.id) } },
+                        onRemove: { Task { await store.removeProject(project.id) } }
+                    )
+                }
             }
-            ForEach(store.projects) { project in
-                ProjectRow(
-                    project: project,
-                    status: store.sessions[project.id]?.status ?? .stopped,
-                    isActive: store.activeID == project.id,
-                    onOpen: { Task { await store.open(project.id) } },
-                    onRemove: { Task { await store.removeProject(project.id) } }
-                )
-            }
+            .padding(.horizontal, 8)
         }
     }
 
+    // MARK: - The foot
+
     private var customizations: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            CustomizationRow(title: "Overview", help: "What this project is", count: nil, isActive: store.view == .overview) {
-                store.view = .overview
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(palette.hairline).frame(height: 1)
+            HStack(spacing: 6) {
+                Text("Customizations")
+                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                Spacer(minLength: 0)
             }
-            CustomizationRow(title: "Tools", help: "The tools omp can use here", count: store.active?.inventory?.tools.count, isActive: store.view == .tools) {
-                store.view = .tools
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 16)
+            .padding(.top, 13)
+            .padding(.bottom, 4)
+
+            Text(inventoryLine)
+                .font(.system(size: 11.5))
+                .foregroundStyle(palette.inkFaint)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 1) {
+                CustomizationRow(title: "Overview", count: nil, isActive: store.view == .overview) {
+                    store.view = .overview
+                }
+                CustomizationRow(title: "Tools", count: store.active?.inventory?.tools.count, isActive: store.view == .tools) {
+                    store.view = .tools
+                }
+                CustomizationRow(title: "Skills", count: store.active?.inventory?.skills.count, isActive: store.view == .skills) {
+                    store.view = .skills
+                }
+                CustomizationRow(title: "Extensions", count: store.active?.inventory?.extensions.count, isActive: store.view == .extensions) {
+                    store.view = .extensions
+                }
+                CustomizationRow(title: "Prompts", count: store.active?.inventory?.prompts.count, isActive: store.view == .prompts) {
+                    store.view = .prompts
+                }
             }
-            CustomizationRow(title: "Skills", help: "The skills available here", count: store.active?.inventory?.skills.count, isActive: store.view == .skills) {
-                store.view = .skills
-            }
-            CustomizationRow(title: "Extensions", help: "The extensions loaded here", count: store.active?.inventory?.extensions.count, isActive: store.view == .extensions) {
-                store.view = .extensions
-            }
-            CustomizationRow(title: "Prompts", help: "The prompt templates here", count: store.active?.inventory?.prompts.count, isActive: store.view == .prompts) {
-                store.view = .prompts
-            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 12)
         }
+    }
+
+    private var inventoryLine: String {
+        let inventory = store.active?.inventory
+        let tools = inventory?.tools.count ?? 0
+        let skills = inventory?.skills.count ?? 0
+        if tools == 0 && skills == 0 {
+            return store.active == nil ? "No project open" : "Nothing found in this project"
+        }
+        return "\(tools) tool\(tools == 1 ? "" : "s") · \(skills) skill\(skills == 1 ? "" : "s")"
     }
 }
 
@@ -121,15 +198,17 @@ private struct ProjectRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(colour)
-                .frame(width: 6, height: 6)
-            Text(project.name)
-                .font(Theme.body(12.5))
-                .foregroundStyle(isActive ? palette.ink : palette.inkDim)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(project.name)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(isActive ? palette.ink : palette.inkDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(ProjectRow.ago(project.createdAt))
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.inkFaint)
+            }
             Spacer(minLength: 4)
             if hovering {
                 Button(action: onRemove) {
@@ -138,14 +217,19 @@ private struct ProjectRow: View {
                         .foregroundStyle(palette.inkFaint)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help("Remove this project")
+            } else {
+                Circle()
+                    .fill(colour)
+                    .frame(width: 6, height: 6)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(isActive ? palette.raised : (hovering ? palette.panel : .clear))
+                .fill(isActive || hovering ? palette.raised : .clear)
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
@@ -162,14 +246,21 @@ private struct ProjectRow: View {
         case .stopped: palette.inkFaint
         }
     }
+
+    /// How long ago a project was added.
+    static func ago(_ date: Date) -> String {
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
+        if seconds < 86400 { return "\(Int(seconds / 3600))h ago" }
+        return "\(Int(seconds / 86400))d ago"
+    }
 }
 
 /// One of the project's pages.
 private struct CustomizationRow: View {
     @Environment(\.palette) private var palette
     let title: String
-    /// What the page holds, shown when the pointer rests on it.
-    let help: String
     let count: Int?
     let isActive: Bool
     let action: () -> Void
@@ -180,31 +271,37 @@ private struct CustomizationRow: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Text(title)
-                    .font(Theme.body(12.5))
+                    .font(.system(size: 13))
                     .foregroundStyle(isActive ? palette.ink : palette.inkDim)
                 Spacer(minLength: 4)
                 if let count {
                     Text("\(count)")
-                        .font(Theme.body(11))
+                        .font(.system(size: 11))
                         .foregroundStyle(palette.inkFaint)
                 }
-                if isActive {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(palette.accent)
-                }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? palette.raised : (hovering ? palette.panel : .clear))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isActive || hovering ? palette.raised : .clear)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .focusable(false)
         .onHover { hovering = $0 }
-        .help(help)
+        .help(CustomizationRow.hint(for: title))
+    }
+
+    /// What each page holds.
+    static func hint(for title: String) -> String {
+        switch title {
+        case "Overview": "What this project is"
+        case "Tools": "The tools omp can use here"
+        case "Skills": "The skills available here"
+        case "Extensions": "The extensions loaded here"
+        default: "The prompt templates here"
+        }
     }
 }

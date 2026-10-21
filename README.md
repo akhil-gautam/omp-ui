@@ -38,9 +38,9 @@ brew tap akhil-gautam/tap
 brew install --cask akhil-gautam/tap/omp-ui
 ```
 
-The first launch shows an empty state. Use **New** in the sidebar to add a
-project directory; omp then starts on that directory and, if the project has
-sessions on disk, the most recent one is resumed.
+The first launch shows an empty state. Use **New project** in the sidebar to
+add a project directory; omp then starts on that directory and, if the project
+has sessions on disk, the most recent one is resumed.
 
 ## What it does
 
@@ -49,8 +49,9 @@ sessions on disk, the most recent one is resumed.
   reopened on the next launch.
 - **Transcripts.** Replies are rendered as markdown: headings, lists, tables,
   task lists, and fenced code with syntax highlighting and a copy button.
-  Thinking is folded away; tool calls collapse into one row that expands into
-  the exact arguments and results omp saw.
+  Thinking is always shown — it is the reasoning, not a summary. A tool call
+  is a card: the call itself on a line of its own, and the result omp saw
+  underneath it.
 - **Composer.** Enter sends, Shift+Enter adds a line. While a turn is running
   Enter queues a follow-up and ⌘Enter steers into the running turn; the send
   button stays there, so a second and a third message can be queued as well,
@@ -67,11 +68,28 @@ sessions on disk, the most recent one is resumed.
 - **What the project can do.** The sidebar's *Customizations* list opens the
   project's overview, its tools, its skills, its extensions and its prompts.
 - **Twenty themes.** The picker in the top bar changes the whole interface:
-  a ground, a set of greys and one accent. The choice is remembered.
+  a ground, a set of greys and one accent. The choice is remembered. The
+  default is a white page and a grey rail, the way a document is.
+- **A window that runs to its edges.** The content begins at the top of the
+  window with the traffic lights drawn over it, the way a browser's does.
 - **Live state.** The plan omp is working through, context usage, message
   count and the current model.
 - **Keyboard.** ⌘K focuses the composer, ⌘N adds a project, ⌘1…⌘9 switch
   between projects.
+
+## The shape of the interface
+
+- **The rail.** The projects on top, with a search over them; the project's
+  own pages — its overview, tools, skills, extensions and prompts — at the
+  foot.
+- **The tab bar.** Every open project is a tab, so the ones that are working
+  are all in sight. Closing a tab stops that agent and gives its memory back.
+- **The conversation.** What you said is a bubble on the right. The agent's
+  thinking is a quiet note. Its tool calls are cards, each with the call on a
+  line of its own and the result beneath it.
+- **The composer.** A card that floats over the page, with the model, the mode
+  and the thinking level along its bottom edge, and the branch and folder
+  below that.
 
 ## Layout
 

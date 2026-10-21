@@ -5,6 +5,11 @@ import OMPCore
 struct MarkdownView: View {
     @Environment(\.palette) private var palette
     let source: String
+    /// The colour of the text, when it should not be the usual ink.
+    var ink: Color?
+
+    /// The colour the text is drawn in.
+    private var textColour: Color { ink ?? palette.ink }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -13,22 +18,22 @@ struct MarkdownView: View {
                 case .heading(_, let level, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.heading(level <= 2 ? 19 : 15))
-                        .foregroundStyle(palette.ink)
+                        .foregroundStyle(textColour)
                         .padding(.top, level <= 2 ? 8 : 2)
                 case .paragraph(_, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(palette.ink)
+                        .foregroundStyle(textColour)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 case .code(_, let language, let text):
                     CodeBlock(language: language, text: text)
                 case .list(_, let ordered, let items):
-                    ListBlock(ordered: ordered, items: items)
+                    ListBlock(ordered: ordered, items: items, ink: ink)
                 case .quote(_, let text):
                     Text(Markdown.inline(text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(palette.inkDim)
+                        .foregroundStyle(ink ?? palette.inkDim)
                         .textSelection(.enabled)
                         .padding(.leading, 12)
                         .overlay(alignment: .leading) {
@@ -104,6 +109,10 @@ struct ListBlock: View {
     @Environment(\.palette) private var palette
     let ordered: Bool
     let items: [MarkdownItem]
+    /// The colour of the text, when it should not be the usual ink.
+    var ink: Color?
+
+    private var textColour: Color { ink ?? palette.ink }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -121,7 +130,7 @@ struct ListBlock: View {
                     }
                     Text(Markdown.inline(item.text))
                         .font(Theme.body(13.5))
-                        .foregroundStyle(palette.ink)
+                        .foregroundStyle(textColour)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }

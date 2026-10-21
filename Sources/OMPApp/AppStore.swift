@@ -82,8 +82,16 @@ public final class AppStore {
     public var isLoading = true
     /// The reader's name, for the greeting.
     public var userName: String = NSFullUserName()
+    /// The projects that have been opened, most recent first.
+    public var history: [String] = []
+    /// Where the reader is in that history.
+    public var historyIndex: Int = 0
+    /// Whether there is somewhere to go back to.
+    public var canGoBack: Bool { historyIndex > 0 }
+    /// Whether there is somewhere to go forward to.
+    public var canGoForward: Bool { historyIndex + 1 < history.count }
     /// The name of the chosen theme.
-    public var themeName: String = UserDefaults.standard.string(forKey: "omp-ui.theme") ?? "Void" {
+    public var themeName: String = UserDefaults.standard.string(forKey: "omp-ui.theme") ?? "Paper" {
         didSet { UserDefaults.standard.set(themeName, forKey: "omp-ui.theme") }
     }
     /// The colours the interface is drawn with.
@@ -132,10 +140,16 @@ public final class AppStore {
     }
 
     /// Opens a project: starts its omp, and reads what it has.
-    public func open(_ id: String) async {
+    public func open(_ id: String, record: Bool = true) async {
         guard let project = projects.first(where: { $0.id == id }) else { return }
         activeID = id
         view = .transcript
+        if record {
+            history.removeAll { $0 == id }
+            history.insert(id, at: 0)
+            if history.count > 24 { history.removeLast() }
+            historyIndex = 0
+        }
 
         let session = sessions[id] ?? ProjectSession(project: project)
         sessions[id] = session
@@ -166,6 +180,22 @@ public final class AppStore {
         }
     }
 
+    /// Goes back through the projects that have been open.
+    public func goBack() async {
+        await travel(to: historyIndex - 1)
+    }
+
+    /// Goes forward through the projects that have been open.
+    public func goForward() async {
+        await travel(to: historyIndex + 1)
+    }
+
+    private func travel(to index: Int) async {
+        guard history.indices.contains(index) else { return }
+        historyIndex = index
+        await open(history[index], record: false)
+    }
+
     /// Ends a project's omp, which gives its memory back.
     public func close(_ id: String) async {
         guard let session = sessions[id] else { return }
@@ -185,6 +215,8 @@ public final class AppStore {
         await close(id)
         sessions.removeValue(forKey: id)
         projects.removeAll { $0.id == id }
+        history.removeAll { $0 == id }
+        historyIndex = min(historyIndex, max(history.count - 1, 0))
         if activeID == id { activeID = projects.first?.id }
         persist()
     }

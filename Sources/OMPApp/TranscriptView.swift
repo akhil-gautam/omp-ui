@@ -8,7 +8,7 @@ struct TranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 22) {
                     if let session = store.active {
                         if session.blocks.isEmpty {
                             GreetingView(store: store)
@@ -27,8 +27,8 @@ struct TranscriptView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .frame(maxWidth: Theme.contentWidth)
-                .padding(.horizontal, 24)
-                .padding(.top, 22)
+                .padding(.horizontal, 28)
+                .padding(.top, 26)
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: store.active?.blocks.count) { _, _ in
@@ -50,21 +50,16 @@ struct GreetingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("WHAT ARE WE BUILDING")
-                .font(Theme.label(10))
-                .foregroundStyle(palette.accent)
-                .tracking(0.2)
-            Text(store.userName.isEmpty ? "What are we building?" : "What are we building, \(store.userName)?")
-                .font(Theme.heading(30))
+            Text("What are we building?")
+                .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(palette.ink)
-                .fixedSize(horizontal: false, vertical: true)
             if let session = store.active {
                 Text("omp is ready in \(session.project.name).")
-                    .font(Theme.body(13))
+                    .font(.system(size: 13.5))
                     .foregroundStyle(palette.inkDim)
             } else {
                 Text("Add a project to give omp a place to work.")
-                    .font(Theme.body(13))
+                    .font(.system(size: 13.5))
                     .foregroundStyle(palette.inkDim)
             }
         }
@@ -81,29 +76,31 @@ struct BlockView: View {
     var body: some View {
         switch block {
         case .user(_, let text):
-            Text(Markdown.inline(text))
-                .font(Theme.body(13.5))
-                .foregroundStyle(palette.ink)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(palette.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            // What the reader said, in a bubble of its own.
+            HStack {
+                Spacer(minLength: 0)
+                Text(Markdown.inline(text))
+                    .font(.system(size: 14))
+                    .foregroundStyle(palette.ink)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(palette.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(maxWidth: 560, alignment: .trailing)
+            }
         case .text(_, let text):
             MarkdownView(source: text)
         case .thinking(_, let text):
             // Thinking is always shown: it is the reasoning, not a summary.
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
                     Image(systemName: "brain")
-                        .font(.system(size: 10))
-                    Text("THINKING")
-                        .font(Theme.label(9))
-                        .tracking(0.14)
+                        .font(.system(size: 13))
+                    Text("Thinking")
+                        .font(.system(size: 13.5))
                 }
-                .foregroundStyle(palette.inkFaint)
-                MarkdownView(source: text)
-                    .foregroundStyle(palette.inkDim)
+                .foregroundStyle(palette.inkDim)
+                MarkdownView(source: text, ink: palette.inkDim)
             }
         case .tool(_, let name, let args, let output, let isError, let running):
             ToolCallView(name: name, args: args, output: output, isError: isError, running: running)
@@ -111,7 +108,7 @@ struct BlockView: View {
     }
 }
 
-/// A tool call: one line, the way a terminal shows it, opened on demand.
+/// A tool call: a card with the call at the top and its result below.
 struct ToolCallView: View {
     @Environment(\.palette) private var palette
     let name: String
@@ -129,8 +126,8 @@ struct ToolCallView: View {
         self.output = output
         self.isError = isError
         self.running = running
-        // A change is shown the way a terminal shows it: open.
-        _expanded = State(initialValue: EditChange(args: args) != nil)
+        // The result is shown the way a terminal shows it: open.
+        _expanded = State(initialValue: true)
     }
 
     /// The one argument worth showing in the line itself.
@@ -152,51 +149,87 @@ struct ToolCallView: View {
         }
     }
 
+    /// The kind of call, in the title's voice.
+    private var title: String {
+        name.prefix(1).uppercased() + name.dropFirst()
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 9) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.inkDim)
+                Text(title)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(palette.ink)
+                Spacer(minLength: 8)
+                if running {
                     Circle()
-                        .fill(running ? palette.accent : (isError ? palette.danger : palette.inkFaint))
-                        .frame(width: 5, height: 5)
-                    Text(name)
-                        .font(Theme.code(11.5))
-                        .foregroundStyle(palette.inkDim)
-                    if let summary {
-                        Text(summary)
-                            .font(Theme.code(11.5))
-                            .foregroundStyle(palette.inkFaint)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(palette.inkFaint)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                        .opacity(hovering || expanded ? 1 : 0)
+                        .fill(palette.accent)
+                        .frame(width: 6, height: 6)
                 }
-                .contentShape(Rectangle())
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(palette.inkFaint)
+                    .rotationEffect(.degrees(expanded ? 0 : -90))
+                    .opacity(hovering || expanded ? 1 : 0)
             }
-            .buttonStyle(.plain)
-            .focusable(false)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() }
+            }
             .onHover { hovering = $0 }
-            .help(expanded ? "Hide the arguments and the result" : "Show the arguments and the result")
+
+            if let summary {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(palette.link)
+                        .frame(width: 6, height: 6)
+                    Text(summary)
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .foregroundStyle(palette.link)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 11)
+            }
 
             if expanded {
                 if let edit = EditChange(args: args) {
                     EditDiff(change: edit)
-                } else if let args, !args.isNull {
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 12)
+                } else if summary == nil, let args, !args.isNull {
+                    // With no argument worth a line, the whole of them are
+                    // shown instead.
                     Labelled(title: "ARGUMENTS", text: args.pretty)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 12)
                 }
                 if let output, !output.isEmpty {
-                    Labelled(title: "RESULT", text: output)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(output)
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .foregroundStyle(isError ? palette.danger : palette.inkDim)
+                            .textSelection(.enabled)
+                            .padding(12)
+                    }
+                    .frame(maxHeight: 190)
+                    .background(palette.codeBackground)
                 }
             }
         }
-        .padding(.vertical, 1)
+        .background(palette.ground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(palette.hairline, lineWidth: 1)
+        }
+        .help(expanded ? "Hide the result" : "Show the result")
     }
 }
 
@@ -232,7 +265,7 @@ struct EditDiff: View {
                         .padding(.trailing, 14)
                     Spacer(minLength: 0)
                 }
-                .font(Theme.code(11.5))
+                .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(colour(for: line))
                 .background(background(for: line))
             }
@@ -271,12 +304,12 @@ private struct Labelled: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(Theme.label(9))
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundStyle(palette.inkFaint)
                 .tracking(0.12)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
-                    .font(Theme.code(11.5))
+                    .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(palette.inkDim)
                     .textSelection(.enabled)
             }

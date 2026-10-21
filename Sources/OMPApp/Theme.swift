@@ -55,6 +55,8 @@ public struct Palette: Sendable, Hashable {
     public var accent: Color
     /// The accent, thinned: the edge of something that is in focus.
     public var accentLine: Color
+    /// The colour of a command, and of a switch that is on.
+    public var link: Color
     public var danger: Color
     public var success: Color
 
@@ -65,24 +67,28 @@ public struct Palette: Sendable, Hashable {
         let white = RGB(0xFFFFFF)
         let black = RGB(0x000000)
         let accentColour = RGB(accent)
+        let link = light ? RGB(0x2563EB) : RGB(0x5AA9F0)
 
         if light {
+            // A light theme is a white page, a grey rail beside it, and the
+            // greys between them.
             return Palette(
                 name: name,
                 isLight: true,
-                ground: base.color,
-                panel: base.mixed(with: white, 0.85).color,
-                raised: base.mixed(with: black, 0.045).color,
-                hairline: base.mixed(with: black, 0.11).color,
-                hairlineSoft: base.mixed(with: black, 0.07).color,
-                codeBackground: base.mixed(with: black, 0.035).color,
+                ground: base.mixed(with: white, 0.94).color,
+                panel: base.color,
+                raised: base.mixed(with: black, 0.05).color,
+                hairline: base.mixed(with: black, 0.09).color,
+                hairlineSoft: base.mixed(with: black, 0.055).color,
+                codeBackground: base.color,
                 ink: base.mixed(with: black, 0.88).color,
-                inkDim: base.mixed(with: black, 0.46).color,
-                inkFaint: base.mixed(with: black, 0.28).color,
+                inkDim: base.mixed(with: black, 0.56).color,
+                inkFaint: base.mixed(with: black, 0.36).color,
                 accent: accentColour.color,
-                accentLine: accentColour.mixed(with: base, 0.55).color,
-                danger: RGB(0xB3261E).color,
-                success: RGB(0x1E7A46).color
+                accentLine: accentColour.mixed(with: white, 0.45).color,
+                link: link.color,
+                danger: RGB(0xDC2626).color,
+                success: RGB(0x16A34A).color
             )
         }
         return Palette(
@@ -93,12 +99,13 @@ public struct Palette: Sendable, Hashable {
             raised: base.mixed(with: white, 0.10).color,
             hairline: base.mixed(with: white, 0.15).color,
             hairlineSoft: base.mixed(with: white, 0.09).color,
-            codeBackground: base.mixed(with: white, 0.025).color,
+            codeBackground: base.mixed(with: white, 0.055).color,
             ink: white.mixed(with: accentColour, 0.05).color,
             inkDim: base.mixed(with: white, 0.58).color,
             inkFaint: base.mixed(with: white, 0.34).color,
             accent: accentColour.color,
             accentLine: accentColour.mixed(with: base, 0.62).color,
+            link: link.color,
             danger: RGB(0xE5696E).color,
             success: RGB(0x55B98A).color
         )
@@ -108,6 +115,8 @@ public struct Palette: Sendable, Hashable {
 /// The themes the app ships with.
 public enum Theme {
     public static let palettes: [Palette] = [
+        // A white page and a grey rail.
+        .make("Paper", light: true, ground: 0xF7F7F7, accent: 0xC42D84),
         // Dark grounds.
         .make("Void", ground: 0x0A0A0B, accent: 0xED4FA6),
         .make("Carbon", ground: 0x0C0C0D, accent: 0xE8B45C),
@@ -121,7 +130,6 @@ public enum Theme {
         .make("Dusk", ground: 0x0A0912, accent: 0xE77BC4),
         .make("Indigo", ground: 0x0A0A14, accent: 0x7C8CF8),
         // Light grounds.
-        .make("Paper", light: true, ground: 0xF7F6F3, accent: 0xB4731A),
         .make("Arctic", light: true, ground: 0xF3F6F9, accent: 0x2E6FB8),
         .make("Sand", light: true, ground: 0xF8F4EA, accent: 0x9A6B2F),
         .make("Mint", light: true, ground: 0xF2F7F4, accent: 0x1F7A5C),
@@ -158,9 +166,8 @@ public enum Theme {
 
     // MARK: - Metrics
 
-    public static let railWidth: CGFloat = 52
-    public static let sidebarWidth: CGFloat = 268
-    public static let contentWidth: CGFloat = 780
+    public static let sidebarWidth: CGFloat = 304
+    public static let contentWidth: CGFloat = 860
 }
 
 // MARK: - The environment
