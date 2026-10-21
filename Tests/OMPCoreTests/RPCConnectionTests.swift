@@ -20,6 +20,8 @@ private func makeServer() throws -> URL {
             answer = {"protocolVersion": 2}
         elif kind == "get_state":
             answer = {"sessionId": "s1", "tokensPerSecond": None}
+        elif kind == "die":
+            sys.exit(0)
         elif kind == "boom":
             print(json.dumps({"id": message["id"], "type": "response", "command": "boom", "success": False, "error": "no such thing"}), flush=True)
             continue
@@ -61,6 +63,22 @@ struct RPCConnectionTests {
             _ = try await connection.call("boom")
         }
         await connection.close()
+    }
+
+    @Test("a connection whose omp has exited is no longer connected")
+    func noticesTheExit() async throws {
+        let server = try makeServer()
+        defer { try? FileManager.default.removeItem(at: server) }
+
+        let connection = RPCConnection(onEvent: { _ in })
+        try await connection.start(executable: "/usr/bin/python3", arguments: [server.path], directory: NSTemporaryDirectory())
+        _ = try await connection.call("get_state")
+        #expect(await connection.isConnected)
+
+        await #expect(throws: RPCError.self) {
+            _ = try await connection.call("die", timeout: .seconds(10))
+        }
+        #expect(await connection.isConnected == false)
     }
 
     @Test("the events the server pushes are delivered")

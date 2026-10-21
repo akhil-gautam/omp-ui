@@ -44,6 +44,17 @@ public final class ProjectSession {
     public var modelList: [ModelInfo] = []
 
     @ObservationIgnored public var process: AgentProcess?
+    /// The start in progress, so a second caller waits for it instead of
+    /// starting another omp.
+    @ObservationIgnored public var starting: Task<Void, Never>?
+    /// The turns that failed, and where each one belongs. omp leaves them out
+    /// of the history it returns, so they are kept here.
+    public var failures: [History.Failure] = []
+    /// Reasons that have arrived but are not yet placed in the transcript.
+    @ObservationIgnored public var unplacedFailures: [String] = []
+    /// The failures the resumed session file records, until the history
+    /// they belong to has been read.
+    @ObservationIgnored public var recordedFailures: (failures: [History.Failure], turns: Int)?
 
     public init(project: Project) {
         self.project = project
@@ -139,7 +150,7 @@ public final class AppStore {
         }
     }
 
-    /// Opens a project: starts its omp, and reads what it has.
+    /// Opens a project: shows it, and starts its omp unless it is already up.
     public func open(_ id: String, record: Bool = true) async {
         guard let project = projects.first(where: { $0.id == id }) else { return }
         activeID = id
@@ -153,7 +164,32 @@ public final class AppStore {
 
         let session = sessions[id] ?? ProjectSession(project: project)
         sessions[id] = session
+        // A project that is already up is only shown: starting it again would
+        // put a second omp on the same session and drop the first.
+        if let process = session.process, await process.isRunning() { return }
+        await start(session)
+    }
+
+    /// Starts a project's omp — once, however many ask at the same time.
+    private func start(_ session: ProjectSession) async {
+        if let starting = session.starting {
+            await starting.value
+            return
+        }
+        let task = Task { await self.boot(session) }
+        session.starting = task
+        await task.value
+        session.starting = nil
+    }
+
+    private func boot(_ session: ProjectSession) async {
+        let project = session.project
         session.status = .starting
+        session.error = nil
+        if let stale = session.process {
+            session.process = nil
+            await stale.stop()
+        }
 
         guard let executable else {
             session.status = .error
@@ -161,6 +197,7 @@ public final class AppStore {
             return
         }
 
+        let id = project.id
         let process = AgentProcess(project: project, executable: executable) { [weak self] frame in
             await MainActor.run { self?.apply(frame, to: id) }
         }
@@ -171,13 +208,31 @@ public final class AppStore {
             // left off.
             let resume = SessionFiles.sessions(for: project.path).first?.path
             try await process.start(resuming: resume)
+            if let resume {
+                session.recordedFailures = await Task.detached {
+                    History.failures(inSessionFile: URL(fileURLWithPath: resume))
+                }.value
+            }
             try await process.setMode(session.mode)
             session.status = .idle
             await refresh(id)
         } catch {
+            // A start that failed leaves nothing behind, so the next message
+            // starts omp again instead of talking to a process that is gone.
+            session.process = nil
+            await process.stop()
             session.status = .error
             session.error = error.localizedDescription
         }
+    }
+
+    /// The project's omp, started again if it has stopped.
+    private func liveProcess(_ session: ProjectSession) async -> AgentProcess? {
+        if let process = session.process, await process.isRunning() { return process }
+        await start(session)
+        if let process = session.process, await process.isRunning() { return process }
+        banner = session.error ?? "omp could not start for \(session.project.name)."
+        return nil
     }
 
     /// Goes back through the projects that have been open.
@@ -199,9 +254,13 @@ public final class AppStore {
     /// Ends a project's omp, which gives its memory back.
     public func close(_ id: String) async {
         guard let session = sessions[id] else { return }
-        await session.process?.stop()
+        // A start in progress finishes first, so it cannot attach a process
+        // after the project has been closed.
+        if let starting = session.starting { await starting.value }
+        let process = session.process
         session.process = nil
         session.status = .stopped
+        await process?.stop()
     }
 
     public func addProject(path: String) async {
@@ -240,7 +299,24 @@ public final class AppStore {
             session.thinkingLevel = state["thinkingLevel"].optionalString ?? "off"
             session.contextUsage = ContextUsage(json: state["contextUsage"])
             session.todoPhases = state["todoPhases"].array.compactMap(TodoPhase.init(json:))
-            session.blocks = try await process.history()
+            let history = try await process.history()
+            let turns = history.reduce(0) { count, block in
+                if case .user = block { return count + 1 }
+                return count
+            }
+            if let recorded = session.recordedFailures {
+                // The file holds every failure of the session, so it replaces
+                // what was kept from before omp was started again.
+                session.failures = History.align(recorded, toHistoryTurns: turns)
+                session.recordedFailures = nil
+            }
+            if !session.unplacedFailures.isEmpty {
+                // A failure belongs to the turn that just ended: the last
+                // thing the reader said.
+                session.failures += session.unplacedFailures.map { History.Failure(turn: turns, text: $0) }
+                session.unplacedFailures = []
+            }
+            session.blocks = History.weave(session.failures, into: history)
             session.commands = (try? await process.availableCommands()) ?? session.commands
             session.modelList = (try? await process.availableModels()) ?? session.modelList
         } catch {
@@ -255,11 +331,12 @@ public final class AppStore {
     // MARK: - Talking to omp
 
     public func send(_ text: String, behavior: String? = nil) async {
-        guard let session = active, let process = session.process else { return }
+        guard let session = active else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // Show the message straight away; omp's own transcript catches up.
         session.blocks.append(.user(id: "local-\(UUID().uuidString)", text: trimmed))
+        guard let process = await liveProcess(session) else { return }
         do {
             try await process.send(trimmed, behavior: behavior)
         } catch {
@@ -288,7 +365,7 @@ public final class AppStore {
     }
 
     public func setModel(_ model: ModelInfo) async {
-        guard let session = active, let process = session.process else { return }
+        guard let session = active, let process = await liveProcess(session) else { return }
         do {
             try await process.setModel(provider: model.provider, modelID: model.id)
             session.model = model
@@ -298,7 +375,7 @@ public final class AppStore {
     }
 
     public func setThinking(_ level: String) async {
-        guard let session = active, let process = session.process else { return }
+        guard let session = active, let process = await liveProcess(session) else { return }
         do {
             try await process.setThinking(level)
             session.thinkingLevel = level
@@ -308,7 +385,7 @@ public final class AppStore {
     }
 
     public func answer(_ request: UIRequest, value: String, cancelled: Bool = false) async {
-        guard let session = active, let process = session.process else { return }
+        guard let session = active, let process = await liveProcess(session) else { return }
         session.pendingRequest = nil
         do {
             try await process.answer(request, value: value, cancelled: cancelled)
@@ -345,6 +422,7 @@ public final class AppStore {
             session.status = .busy
         case "agent_end":
             session.status = .idle
+            session.unplacedFailures += History.failureReasons(in: frame)
             Task { await self.refresh(id) }
         case "message_start":
             let messageID = frame["messageId"].string
@@ -393,6 +471,13 @@ public final class AppStore {
             session.pendingRequest = nil
         case "available_commands_update":
             session.commands = frame["commands"].array.compactMap(SlashCommand.init(json:))
+        case "prompt_result":
+            // A turn that ran and failed arrives in the transcript; one that
+            // failed before reaching the agent has nowhere else to be said.
+            if frame["status"].string == "error", !frame["agentInvoked"].bool {
+                let message = frame["error"]["message"].string
+                banner = message.isEmpty ? "omp could not start the turn." : message
+            }
         case "disconnected":
             session.status = .stopped
             session.error = frame["reason"].optionalString

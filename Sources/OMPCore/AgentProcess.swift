@@ -45,7 +45,11 @@ public actor AgentProcess {
         await connection?.close()
     }
 
-    public func isRunning() -> Bool { connection != nil }
+    /// Whether omp is up and answering: a connection whose process has exited
+    /// does not count.
+    public func isRunning() async -> Bool {
+        await connection?.isConnected ?? false
+    }
 
     // MARK: - Commands
 
@@ -163,6 +167,12 @@ public enum History {
                         break
                     }
                 }
+                // A turn the provider refused leaves no content, only the
+                // reason; without it the turn would look like silence.
+                if message["stopReason"].string == "error" {
+                    let reason = message["errorMessage"].string
+                    blocks.append(.failure(id: "m\(index)f", text: reason.isEmpty ? "The model returned an error." : reason))
+                }
             case "toolResult":
                 let callID = message["toolCallId"].string
                 let name = message["toolName"].string.isEmpty ? "tool" : message["toolName"].string
@@ -183,6 +193,97 @@ public enum History {
             }
         }
         return blocks
+    }
+
+    /// A turn that failed, and the message it answered: the failure belongs
+    /// at the end of the turn that began with the `turn`-th thing the reader
+    /// said, counting from one.
+    public struct Failure: Sendable, Equatable {
+        public var turn: Int
+        public var text: String
+
+        public init(turn: Int, text: String) {
+            self.turn = turn
+            self.text = text
+        }
+    }
+
+    /// The reasons a finished turn failed, read from its `agent_end`.
+    ///
+    /// omp keeps a failed reply out of the session's messages — the model
+    /// never sees it again — so the only place its reason arrives is the
+    /// event that ends the turn.
+    public static func failureReasons(in agentEnd: JSONValue) -> [String] {
+        agentEnd["messages"].array.compactMap { message in
+            guard message["role"].string == "assistant", message["stopReason"].string == "error" else { return nil }
+            let reason = message["errorMessage"].string
+            return reason.isEmpty ? "The model returned an error." : reason
+        }
+    }
+
+    /// The failures a session file records, numbered by the turns in that
+    /// file, and how many turns the file holds.
+    ///
+    /// omp leaves a failed reply out of the messages it returns for a resumed
+    /// session, so after a restart the file is the only place it survives.
+    public static func failures(inSessionFile url: URL) -> (failures: [Failure], turns: Int) {
+        guard let data = try? Data(contentsOf: url) else { return ([], 0) }
+        var failures: [Failure] = []
+        var turns = 0
+        for line in data.split(separator: 10) {
+            guard let entry = try? JSONDecoder().decode(JSONValue.self, from: Data(line)) else { continue }
+            let message = entry["message"]
+            switch message["role"].string {
+            case "user", "developer":
+                if !plainText(message["content"]).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { turns += 1 }
+            case "assistant" where message["stopReason"].string == "error":
+                let reason = message["errorMessage"].string
+                failures.append(Failure(turn: turns, text: reason.isEmpty ? "The model returned an error." : reason))
+            default:
+                break
+            }
+        }
+        return (failures, turns)
+    }
+
+    /// Moves failures numbered by a session file onto the history omp
+    /// returned. The two agree at their ends — older turns may have been
+    /// compacted away — so the numbering is shifted by the difference.
+    public static func align(_ recorded: (failures: [Failure], turns: Int), toHistoryTurns turns: Int) -> [Failure] {
+        guard turns > 0 else { return [] }
+        let shift = turns - recorded.turns
+        return recorded.failures.compactMap { failure in
+            let turn = failure.turn + shift
+            return (1...turns).contains(turn) ? Failure(turn: turn, text: failure.text) : nil
+        }
+    }
+
+    /// Puts failures back where they happened, after the turn they ended.
+    /// A turn that already shows a failure is left as it is.
+    public static func weave(_ failures: [Failure], into blocks: [Block]) -> [Block] {
+        guard !failures.isEmpty else { return blocks }
+        var result: [Block] = []
+        var turn = 0
+        var turnHasFailure = false
+
+        func close() {
+            guard !turnHasFailure else { return }
+            for (position, failure) in failures.enumerated() where failure.turn == turn {
+                result.append(.failure(id: "failure-\(turn)-\(position)", text: failure.text))
+            }
+        }
+
+        for block in blocks {
+            if case .user = block {
+                close()
+                turn += 1
+                turnHasFailure = false
+            }
+            if case .failure = block { turnHasFailure = true }
+            result.append(block)
+        }
+        close()
+        return result
     }
 
     /// The text of a content value, which may be a string or a list of parts.

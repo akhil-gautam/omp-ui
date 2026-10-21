@@ -44,6 +44,9 @@ public actor RPCConnection {
 
     public func hasPendingRequest(_ id: String) -> Bool { pending[id] != nil }
 
+    /// Whether the child is running and its pipes are open.
+    public var isConnected: Bool { process != nil && !didDisconnect }
+
     // MARK: - Starting
 
     public func start(executable: String, arguments: [String], directory: String, environment: [String: String]? = nil) throws {

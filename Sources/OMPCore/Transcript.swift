@@ -6,17 +6,19 @@ public enum Block: Identifiable, Sendable, Equatable {
     case text(id: String, text: String)
     case thinking(id: String, text: String)
     case tool(id: String, name: String, args: JSONValue?, output: String?, isError: Bool, running: Bool)
+    /// A turn the model could not finish, with the reason it gave.
+    case failure(id: String, text: String)
 
     public var id: String {
         switch self {
-        case .user(let id, _), .text(let id, _), .thinking(let id, _), .tool(let id, _, _, _, _, _): id
+        case .user(let id, _), .text(let id, _), .thinking(let id, _), .tool(let id, _, _, _, _, _), .failure(let id, _): id
         }
     }
 
     /// The text the block shows, when it shows any.
     public var text: String {
         switch self {
-        case .user(_, let text), .text(_, let text), .thinking(_, let text): text
+        case .user(_, let text), .text(_, let text), .thinking(_, let text), .failure(_, let text): text
         case .tool: ""
         }
     }
@@ -58,7 +60,7 @@ public struct Transcript: Sendable {
             case .user(let blockID, let body): block = .user(id: blockID, text: body + text)
             case .text(let blockID, let body): block = .text(id: blockID, text: body + text)
             case .thinking(let blockID, let body): block = .thinking(id: blockID, text: body + text)
-            case .tool: break
+            case .tool, .failure: break
             }
         }
     }

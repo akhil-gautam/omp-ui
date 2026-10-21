@@ -104,6 +104,30 @@ struct BlockView: View {
             }
         case .tool(_, let name, let args, let output, let isError, let running):
             ToolCallView(name: name, args: args, output: output, isError: isError, running: running)
+        case .failure(_, let text):
+            // A turn the model could not finish says why, where it happened.
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 12, weight: .medium))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The turn failed")
+                        .font(.system(size: 13.5, weight: .medium))
+                    Text(text)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(palette.inkDim)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(palette.danger)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(palette.danger.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(palette.danger.opacity(0.25), lineWidth: 1)
+            }
         }
     }
 }

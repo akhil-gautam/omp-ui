@@ -112,19 +112,33 @@ struct TabBarView: View {
     private func tab(_ project: Project) -> some View {
         let active = store.activeID == project.id
         return HStack(spacing: 7) {
-            Circle()
-                .fill(colour(for: project))
-                .frame(width: 6, height: 6)
-            Text(project.name)
-                .font(.system(size: 12.5))
-                .foregroundStyle(active ? palette.ink : palette.inkDim)
-                .lineLimit(1)
+            // The tab and its close button are separate targets, so closing
+            // a tab can never also open it.
+            Button {
+                Task { await store.open(project.id) }
+            } label: {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(colour(for: project))
+                        .frame(width: 6, height: 6)
+                    Text(project.name)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(active ? palette.ink : palette.inkDim)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("Open \(project.name)")
             Button {
                 Task { await store.close(project.id) }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(palette.inkFaint)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .focusable(false)
@@ -132,9 +146,6 @@ struct TabBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await store.open(project.id) } }
-        .help("Open \(project.name)")
     }
 
     private func colour(for project: Project) -> Color {

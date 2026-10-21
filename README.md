@@ -63,6 +63,11 @@ has sessions on disk, the most recent one is resumed.
   second and a third and none of them is lost. It drives omp's own steering,
   follow-up and interrupt modes, and the app applies it to omp when a project
   opens.
+- **Failed turns say why.** When a provider refuses a turn — out of credits,
+  a bad key, a model that is gone — the reason appears under the message it
+  answered, and it is still there after a restart.
+- **omp is kept running.** If a project's omp has stopped, the next message
+  starts it again; opening a project that is already running leaves it alone.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt — the request appears and omp waits for your answer.
 - **What the project can do.** The sidebar's *Customizations* list opens the
