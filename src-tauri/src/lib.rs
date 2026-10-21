@@ -6,6 +6,7 @@
 pub mod commands;
 pub mod manager;
 pub mod omp_bin;
+pub mod project;
 pub mod protocol;
 pub mod sessions;
 pub mod store;
@@ -47,6 +48,11 @@ pub fn run() {
 			commands::list_sessions,
 			commands::switch_session,
 			commands::refresh_state,
+			commands::branch,
+			commands::set_session_mode,
+			commands::inventory,
+			commands::user_name,
+			commands::approval_mode,
 			commands::answer_ui,
 		])
 		.run(tauri::generate_context!())

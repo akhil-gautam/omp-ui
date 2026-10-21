@@ -31,6 +31,18 @@ vi.mock("./api", () => ({
 	listSessions: async () => [],
 	switchSession: async () => undefined,
 	refreshState: async () => ({}),
+	branch: async () => null,
+	setSessionMode: async () => undefined,
+	inventory: async () => ({
+		tools: [],
+		skills: [],
+		extensions: [],
+		prompts: [],
+		commands: 0,
+		subagents: 0,
+	}),
+	userName: async () => "Akhil",
+	approvalMode: async () => null,
 	answerUi: async () => undefined,
 	onUiEvent: (handler: (event: unknown) => void) => onUiEvent(handler),
 }));

@@ -5,11 +5,13 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
+	inventorySchema,
 	modelListSchema,
 	openResultSchema,
 	projectSchema,
 	sessionSummarySchema,
 	uiEventSchema,
+	type Inventory,
 	type ModelListEntry,
 	type OpenResult,
 	type Project,
@@ -60,6 +62,23 @@ export const listSessions = async (id: string): Promise<SessionSummary[]> =>
 export const switchSession = (id: string, path: string) => invoke<void>("switch_session", { id, path });
 
 export const refreshState = (id: string) => invoke<unknown>("refresh_state", { id });
+
+/** The branch the project is on, when it is a git repository. */
+export const branch = (id: string) => invoke<string | null>("branch", { id });
+
+/** How the session behaves: `interactive` or `autopilot`. */
+export const setSessionMode = (id: string, mode: string) => invoke<void>("set_session_mode", { id, mode });
+
+/** What the project has, for the sidebar's counts. */
+export const inventory = async (id: string): Promise<Inventory> =>
+	inventorySchema.parse(await invoke<unknown>("inventory", { id }));
+
+/** The name of the user, for the greeting. */
+export const userName = async (): Promise<string> => (await invoke<string>("user_name")) ?? "";
+
+/** How omp asks before it acts, as configured. */
+export const approvalMode = async (): Promise<string | null> =>
+	(await invoke<string | null>("approval_mode")) ?? null;
 
 export const answerUi = (id: string, requestId: string, answer: UiAnswer) =>
 	invoke<void>("answer_ui", { id, requestId, answer });

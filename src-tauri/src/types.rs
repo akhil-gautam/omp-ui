@@ -217,6 +217,18 @@ pub struct CommandSubcommand {
 	pub usage: Option<String>,
 }
 
+/// What a project has, for the sidebar's counts and panels.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Inventory {
+	pub tools: Vec<String>,
+	pub skills: Vec<String>,
+	pub extensions: Vec<String>,
+	pub prompts: Vec<String>,
+	pub commands: usize,
+	pub subagents: usize,
+}
+
 /// A normalised transcript entry.
 ///
 /// A tool call and its result are one block: the result fills in the call's

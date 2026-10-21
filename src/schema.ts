@@ -220,6 +220,16 @@ export const sessionSummarySchema = z.object({
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 
+export const inventorySchema = z.object({
+	tools: z.array(z.string()),
+	skills: z.array(z.string()),
+	extensions: z.array(z.string()),
+	prompts: z.array(z.string()),
+	commands: z.number(),
+	subagents: z.number(),
+});
+export type Inventory = z.infer<typeof inventorySchema>;
+
 export const openResultSchema = z.object({
 	project: projectSchema,
 	state: sessionStateSchema,

@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import * as api from "./api";
-import { sessionStateSchema, type UiEvent } from "./schema";
+import { sessionStateSchema, type Inventory, type ModelListEntry, type SessionSummary, type UiEvent } from "./schema";
 import { initialStore, reducer } from "./store";
-import Composer from "./components/Composer";
-import ProjectHeader from "./components/ProjectHeader";
+import Composer, { type ComposerChrome } from "./components/Composer";
+import IconRail from "./components/IconRail";
+import { type SessionMode } from "./components/ModeMenu";
+import Panel from "./components/Panel";
 import Sidebar from "./components/Sidebar";
+import TodoPanel from "./components/TodoPanel";
+import TopBar from "./components/TopBar";
 import Transcript from "./components/Transcript";
 import UiDialog from "./components/UiDialog";
+import { IconPlay, IconStop } from "./components/Icons";
 
 type Theme = "dark" | "light";
 
 const THEME_KEY = "omp-ui.theme";
+
+/** The pages the main column can show. */
+type View = "transcript" | "overview" | "tools" | "skills" | "extensions" | "prompts";
 
 export default function App() {
 	const [store, dispatch] = useReducer(reducer, initialStore);
@@ -23,6 +31,16 @@ export default function App() {
 		}
 		return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 	});
+	const [sidebarOpen, setSidebarOpen] = useState(true);
+	const [view, setView] = useState<View>("transcript");
+	const [mode, setMode] = useState<SessionMode>("interactive");
+	const [branch, setBranch] = useState<string | null>(null);
+	const [inventory, setInventory] = useState<Inventory | null>(null);
+	const [approval, setApproval] = useState<string | null>(null);
+	const [user, setUser] = useState("");
+	const [models, setModels] = useState<ModelListEntry[]>([]);
+	const [sessions, setSessions] = useState<SessionSummary[]>([]);
+	const [sessionIndex, setSessionIndex] = useState(0);
 	const composer = useRef<HTMLTextAreaElement>(null);
 	const [suggestion, setSuggestion] = useState<string | null>(null);
 	const onSuggestionApplied = useCallback(() => setSuggestion(null), []);
@@ -38,6 +56,17 @@ export default function App() {
 		// a title bar of their own and need no room.
 		const mac = navigator.userAgent.includes("Mac");
 		document.documentElement.style.setProperty("--titlebar-height", mac ? "38px" : "0px");
+	}, []);
+
+	useEffect(() => {
+		void api
+			.userName()
+			.then(setUser)
+			.catch(() => undefined);
+		void api
+			.approvalMode()
+			.then(setApproval)
+			.catch(() => undefined);
 	}, []);
 
 	const handleEvent = useCallback((event: UiEvent) => {
@@ -113,6 +142,60 @@ export default function App() {
 		[store.activeId, store.workspaces],
 	);
 
+	// Everything that belongs to the open project is read once, when it
+	// changes: the branch, the catalogue, the model list and the session
+	// history.
+	useEffect(() => {
+		if (!active) {
+			setBranch(null);
+			setInventory(null);
+			setModels([]);
+			setSessions([]);
+			setSessionIndex(0);
+			return;
+		}
+		const id = active.project.id;
+		let cancelled = false;
+
+		void api
+			.branch(id)
+			.then((value) => {
+				if (!cancelled) {
+					setBranch(value);
+				}
+			})
+			.catch(() => undefined);
+		void api
+			.inventory(id)
+			.then((value) => {
+				if (!cancelled) {
+					setInventory(value);
+				}
+			})
+			.catch(() => undefined);
+		void api
+			.listModels(id)
+			.then((value) => {
+				if (!cancelled) {
+					setModels(value);
+				}
+			})
+			.catch(() => undefined);
+		void api
+			.listSessions(id)
+			.then((value) => {
+				if (!cancelled) {
+					setSessions(value);
+					setSessionIndex(0);
+				}
+			})
+			.catch(() => undefined);
+
+		return () => {
+			cancelled = true;
+		};
+	}, [active]);
+
 	const addProject = useCallback(async () => {
 		try {
 			const path = await api.pickFolder();
@@ -166,6 +249,70 @@ export default function App() {
 		[active],
 	);
 
+	const changeMode = useCallback(
+		(next: SessionMode) => {
+			setMode(next);
+			if (!active) {
+				return;
+			}
+			void api
+				.setSessionMode(active.project.id, next)
+				.catch((error: unknown) => setBanner(String(error)));
+		},
+		[active],
+	);
+
+	const pickModel = useCallback(
+		(id: string) => {
+			if (!active) {
+				return;
+			}
+			const picked = models.find((model) => model.id === id);
+			if (!picked) {
+				return;
+			}
+			void api
+				.setModel(active.project.id, picked.provider ?? "", picked.id)
+				.catch((error: unknown) => setBanner(String(error)));
+		},
+		[active, models],
+	);
+
+	const pickThinking = useCallback(
+		(level: string) => {
+			if (!active) {
+				return;
+			}
+			void api
+				.setThinking(active.project.id, level)
+				.catch((error: unknown) => setBanner(String(error)));
+		},
+		[active],
+	);
+
+	// Back and forward walk the project's session history.
+	const step = useCallback(
+		async (delta: number) => {
+			if (!active) {
+				return;
+			}
+			const next = sessionIndex + delta;
+			const target = sessions[next];
+			if (!target) {
+				return;
+			}
+			setSessionIndex(next);
+			try {
+				await api.switchSession(active.project.id, target.path);
+				const result = await api.openProject(active.project.id);
+				dispatch({ type: "open", result });
+			} catch (error) {
+				setBanner(String(error));
+			}
+		},
+		[active, sessionIndex, sessions],
+	);
+
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (!(event.metaKey || event.ctrlKey) || event.altKey) {
@@ -193,24 +340,115 @@ export default function App() {
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [addProject, openProject, store.projects]);
 
+	const chrome: ComposerChrome = {
+		projects: store.projects,
+		onProject: (id) => void openProject(id),
+		models,
+		model: active?.state?.model?.id ?? "",
+		onModel: pickModel,
+		mode,
+		onMode: changeMode,
+		thinking: active?.state?.thinkingLevel ?? "off",
+		onThinking: pickThinking,
+		branch,
+		approval,
+	};
+
+	const greeting = user ? `What are we building, ${user}?` : "What are we building?";
+	const showGreeting = view === "transcript" && (active?.blocks.length ?? 0) === 0;
+
 	return (
-		<div className="app">
+		<div className={`app ${sidebarOpen ? "" : "no-sidebar"}`}>
+			<IconRail
+				theme={theme}
+				onToggleTheme={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
+				onToggleSidebar={() => setSidebarOpen((value) => !value)}
+				sidebarOpen={sidebarOpen}
+			/>
+
 			<Sidebar
 				projects={store.projects}
 				workspaces={store.workspaces}
 				activeId={store.activeId}
-				theme={theme}
-				onToggleTheme={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
+				inventory={inventory}
+				view={view}
+				onView={(next) => setView(next as View)}
 				onSelect={(id) => void openProject(id)}
 				onAdd={() => void addProject()}
 				onRemove={(id) => void removeProject(id)}
 			/>
 
 			<main className="main">
+				<TopBar
+					projects={store.projects}
+					activeId={store.activeId}
+					onSelect={(id) => {
+						setView("transcript");
+						void openProject(id);
+					}}
+					onBack={() => void step(1)}
+					onForward={() => void step(-1)}
+					canBack={sessionIndex < sessions.length - 1}
+					canForward={sessionIndex > 0}
+				>
+					{active ? (
+						<>
+							<button
+								className="icon-button"
+								title="Start a new session"
+								aria-label="Start a new session"
+								onClick={() =>
+									void api
+										.newSession(active.project.id)
+										.catch((error: unknown) => setBanner(String(error)))
+								}
+							>
+								<IconPlay />
+							</button>
+							<button
+								className="icon-button"
+								title="Stop omp for this project and free its memory"
+								aria-label="Stop omp"
+								onClick={() =>
+									void api
+										.closeProject(active.project.id)
+										.catch((error: unknown) => setBanner(String(error)))
+								}
+							>
+								<IconStop />
+							</button>
+						</>
+					) : null}
+				</TopBar>
+
 				{active ? (
 					<>
-						<ProjectHeader workspace={active} onError={setBanner} />
-						<Transcript blocks={active.blocks} onSuggest={setSuggestion} />
+						{active.state?.todoPhases?.length ? (
+							<div className="todos-strip">
+								<TodoPanel phases={active.state.todoPhases} />
+							</div>
+						) : null}
+
+						{showGreeting ? (
+							<div className="greeting">
+								<h1>{greeting}</h1>
+								<p>omp is ready in {active.project.name}.</p>
+							</div>
+						) : null}
+
+						{view === "transcript" ? (
+							<Transcript blocks={active.blocks} onSuggest={setSuggestion} />
+						) : (
+							<Panel
+								view={view}
+								workspace={active}
+								inventory={inventory}
+								branch={branch}
+								mode={mode}
+								approval={approval}
+							/>
+						)}
+
 						<Composer
 							workspace={active}
 							inputRef={composer}
@@ -222,11 +460,12 @@ export default function App() {
 									.abortTurn(active.project.id)
 									.catch((error: unknown) => setBanner(String(error)))
 							}
+							chrome={chrome}
 						/>
 					</>
 				) : (
 					<div className="empty">
-						<h1>omp-ui</h1>
+						<h1>{greeting}</h1>
 						<p>Add a project to give omp a place to work.</p>
 						<button className="primary" onClick={() => void addProject()}>
 							Add a project

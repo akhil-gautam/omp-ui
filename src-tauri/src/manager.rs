@@ -17,8 +17,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use omp_rpc::wire::{
 	AbortCommand, AnswersUiResponse, CancelUiResponse, CompactCommand, ConfirmUiResponse,
 	ExtensionUiResponse, GetAvailableCommandsCommand, GetAvailableModelsCommand, GetStateCommand,
-	NewSessionCommand, PromptCommand, RpcInbound, SessionState, SetAskDialogCommand, SetModelCommand,
-	SetThinkingLevelCommand, StreamingBehavior, SwitchSessionCommand, ThinkingLevel, ValueUiResponse,
+	GetSubagentsCommand, InterruptMode, NewSessionCommand, PromptCommand, QueueMode, RpcInbound,
+	SessionState, SetAskDialogCommand, SetFollowUpModeCommand, SetInterruptModeCommand,
+	SetModelCommand, SetSteeringModeCommand, SetThinkingLevelCommand, SlashCommandSource,
+	StreamingBehavior, SwitchSessionCommand, ThinkingLevel, ValueUiResponse,
 };
 use omp_rpc::{Client, ClientOptions, Event};
 use serde::Serialize;
@@ -28,10 +30,13 @@ use serde_json::Value;
 use tauri::Manager as _;
 
 use crate::omp_bin;
+use crate::project;
 use crate::protocol;
 use crate::sessions::{self, SessionSummary};
 use crate::store::ProjectStore;
-use crate::types::{Block, CommandInfo, EventKind, Project, SessionStatus, UiAnswer, UiEvent};
+use crate::types::{
+	Block, CommandInfo, EventKind, Inventory, Project, SessionStatus, UiAnswer, UiEvent,
+};
 
 /// The label of the app's only window.
 const MAIN_WINDOW: &str = "main";
@@ -318,6 +323,66 @@ impl Manager {
 	/// The process id of the project's omp, when it is running.
 	pub fn omp_pid(&self, id: &str) -> Option<u32> {
 		self.client(id).ok().and_then(|client| client.pid())
+	}
+
+	/// The branch the project is on, when it is a git repository.
+	pub fn branch(&self, id: &str) -> Option<String> {
+		let project = self.project(id).ok()?;
+		project::branch(Path::new(&project.path))
+	}
+
+	/// How the session behaves.
+	///
+	/// `interactive` takes one message at a time and lets the reader steer
+	/// straight away; `autopilot` queues everything and lets side-effecting
+	/// work finish before omp takes its next turn.
+	pub fn set_session_mode(&self, id: &str, mode: &str) -> Result<(), String> {
+		let client = self.client(id)?;
+		let (queue, interrupt) = match mode {
+			"autopilot" => (QueueMode::All, InterruptMode::Wait),
+			_ => (QueueMode::OneAtATime, InterruptMode::Immediate),
+		};
+		client
+			.call(&SetSteeringModeCommand { mode: queue })
+			.map_err(|error| error.to_string())?;
+		client
+			.call(&SetFollowUpModeCommand { mode: queue })
+			.map_err(|error| error.to_string())?;
+		client
+			.call(&SetInterruptModeCommand { mode: interrupt })
+			.map_err(|error| error.to_string())?;
+		Ok(())
+	}
+
+	/// What the project has, for the sidebar's counts.
+	pub fn inventory(&self, id: &str) -> Result<Inventory, String> {
+		let client = self.client(id)?;
+		let state = client.call(&GetStateCommand {}).map_err(|error| error.to_string())?;
+		let commands =
+			client.call(&GetAvailableCommandsCommand {}).map_err(|error| error.to_string())?;
+		let subagents = client.call(&GetSubagentsCommand {}).map_err(|error| error.to_string())?;
+		Ok(Inventory {
+			tools: state.dump_tools.iter().map(|tool| tool.name.clone()).collect(),
+			skills: commands
+				.iter()
+				.filter(|command| command.source == SlashCommandSource::Skill)
+				.map(|command| command.name.clone())
+				.collect(),
+			extensions: commands
+				.iter()
+				.filter(|command| command.source == SlashCommandSource::Extension)
+				.map(|command| command.name.clone())
+				.collect(),
+			prompts: commands
+				.iter()
+				.filter(|command| {
+					matches!(command.source, SlashCommandSource::McpPrompt | SlashCommandSource::File)
+				})
+				.map(|command| command.name.clone())
+				.collect(),
+			commands: commands.len(),
+			subagents: subagents.len(),
+		})
 	}
 
 	/// Shows the open project in the window title.

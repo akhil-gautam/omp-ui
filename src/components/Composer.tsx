@@ -1,8 +1,27 @@
 import { useEffect, useMemo, useState, type RefObject } from "react";
 
 import { matchCommands, type CommandMatch } from "../commands";
+import type { ModelListEntry, Project } from "../schema";
 import type { Workspace } from "../store";
+import { IconArrowUp, IconBolt, IconChevronDown, IconFolder, IconGitBranch, IconMessage, IconMic, IconPlus, IconStop } from "./Icons";
+import ModeMenu, { modeLabel, type SessionMode } from "./ModeMenu";
+import Popover from "./Popover";
 import SlashMenu from "./SlashMenu";
+
+/** The controls that sit around the text box. */
+export type ComposerChrome = {
+	projects: Project[];
+	onProject: (id: string) => void;
+	models: ModelListEntry[];
+	model: string;
+	onModel: (id: string) => void;
+	mode: SessionMode;
+	onMode: (mode: SessionMode) => void;
+	thinking: string;
+	onThinking: (level: string) => void;
+	branch: string | null;
+	approval: string | null;
+};
 
 type Props = {
 	workspace: Workspace;
@@ -13,10 +32,28 @@ type Props = {
 	onSuggestionApplied: () => void;
 	onSend: (text: string, behavior?: "steer") => void;
 	onAbort: () => void;
+	chrome: ComposerChrome;
 };
 
 /** The composer grows with its content, up to this height. */
-const MAX_HEIGHT = 220;
+const MAX_HEIGHT = 200;
+
+const THINKING_LEVELS: { value: string; label: string }[] = [
+	{ value: "off", label: "Off" },
+	{ value: "minimal", label: "Minimal" },
+	{ value: "low", label: "Low" },
+	{ value: "medium", label: "Medium" },
+	{ value: "high", label: "High" },
+	{ value: "xhigh", label: "Extra high" },
+	{ value: "max", label: "Max" },
+];
+
+const APPROVAL_LABELS: Record<string, string> = {
+	"always-ask": "Manual",
+	"always-ask-cached": "Manual, remembered",
+	write: "Writes only",
+	yolo: "Automatic",
+};
 
 export default function Composer({
 	workspace,
@@ -25,6 +62,7 @@ export default function Composer({
 	onSuggestionApplied,
 	onSend,
 	onAbort,
+	chrome,
 }: Props) {
 	const [draft, setDraft] = useState("");
 	const [dismissed, setDismissed] = useState(false);
@@ -116,6 +154,17 @@ export default function Composer({
 		}
 	};
 
+	const model = chrome.models.find((entry) => entry.id === chrome.model);
+	const modelName = model?.name ?? chrome.model ?? "Model";
+	const project = workspace.project;
+	const thinkingLabel =
+		THINKING_LEVELS.find((level) => level.value === chrome.thinking)?.label ?? chrome.thinking;
+	const used = state?.contextUsage?.percent;
+	const balance = used === undefined ? null : Math.max(0, Math.round(100 - used));
+	const approval = chrome.approval
+		? (APPROVAL_LABELS[chrome.approval] ?? chrome.approval)
+		: null;
+
 	return (
 		<div className="composer">
 			{queue.steering.length > 0 || queue.followUp.length > 0 ? (
@@ -126,14 +175,71 @@ export default function Composer({
 						</span>
 					))}
 					{queue.followUp.map((text, index) => (
-						<span className="chip follow" key={`follow-${index}`}>
+						<span className="chip follow" key={`follow-up-${index}`}>
 							{text}
 						</span>
 					))}
 				</div>
 			) : null}
 
-			<div className="composer-shell">
+			<div className="composer-card">
+				<div className="composer-top">
+					<Popover
+						side="top"
+						label={
+							<>
+								<IconFolder />
+								<span>{project.name}</span>
+								<IconChevronDown className="chip-caret" />
+							</>
+						}
+					>
+						<div className="menu menu-list">
+							{chrome.projects.map((entry) => (
+								<button
+									key={entry.id}
+									className={`menu-item ${entry.id === project.id ? "active" : ""}`}
+									onClick={() => chrome.onProject(entry.id)}
+								>
+									<span className="menu-item-icon">
+										<IconFolder />
+									</span>
+									<span className="menu-item-text">
+										<strong>{entry.name}</strong>
+										<small>{entry.path}</small>
+									</span>
+								</button>
+							))}
+						</div>
+					</Popover>
+
+					<Popover
+						side="top"
+						label={
+							<>
+								<IconBolt />
+								<span>{modelName}</span>
+								<IconChevronDown className="chip-caret" />
+							</>
+						}
+					>
+						<div className="menu menu-list">
+							{chrome.models.map((entry) => (
+								<button
+									key={entry.id}
+									className={`menu-item ${entry.id === chrome.model ? "active" : ""}`}
+									onClick={() => chrome.onModel(entry.id)}
+								>
+									<span className="menu-item-text">
+										<strong>{entry.name}</strong>
+										<small>{entry.provider}</small>
+									</span>
+								</button>
+							))}
+						</div>
+					</Popover>
+				</div>
+
 				{menuOpen ? (
 					<SlashMenu
 						matches={matches}
@@ -143,36 +249,109 @@ export default function Composer({
 					/>
 				) : null}
 
-				<div className="composer-row">
-					<textarea
-						className="composer-input"
-						ref={inputRef}
-						value={draft}
-						rows={1}
-						placeholder={busy ? "Queue a follow-up…" : "Ask omp anything…"}
-						onChange={(event) => {
-							setDraft(event.target.value);
+				<textarea
+					className="composer-input"
+					ref={inputRef}
+					value={draft}
+					rows={1}
+					placeholder={busy ? "Queue a follow-up…" : "Pitch your idea"}
+					onChange={(event) => {
+						setDraft(event.target.value);
+						setDismissed(false);
+					}}
+					onKeyDown={onKeyDown}
+				/>
+
+				<div className="composer-actions">
+					<button
+						className="icon-button"
+						title="Run a command"
+						aria-label="Run a command"
+						onClick={() => {
+							setDraft("/");
 							setDismissed(false);
+							inputRef.current?.focus();
 						}}
-						onKeyDown={onKeyDown}
-					/>
+					>
+						<IconPlus />
+					</button>
+
+					<ModeMenu mode={chrome.mode} onChange={chrome.onMode} approval={chrome.approval} />
+
+					<Popover
+						side="top"
+						label={
+							<>
+								<IconBolt />
+								<span>{thinkingLabel}</span>
+								<IconChevronDown className="chip-caret" />
+							</>
+						}
+					>
+						<div className="menu menu-list">
+							{THINKING_LEVELS.map((level) => (
+								<button
+									key={level.value}
+									className={`menu-item ${level.value === chrome.thinking ? "active" : ""}`}
+									onClick={() => chrome.onThinking(level.value)}
+								>
+									<span className="menu-item-text">
+										<strong>{level.label}</strong>
+									</span>
+								</button>
+							))}
+						</div>
+					</Popover>
+
+					{balance === null ? null : (
+						<span className="balance-chip" title="Context left in this session">
+							{balance}% left
+						</span>
+					)}
+
+					<div className="composer-spacer" />
+
+					<button className="icon-button" title="Dictate" aria-label="Dictate">
+						<IconMic />
+					</button>
+
 					{busy ? (
-						<button className="danger" onClick={onAbort}>
-							Stop
+						<button className="send stop" onClick={onAbort} title="Stop" aria-label="Stop">
+							<IconStop />
 						</button>
 					) : (
-						<button className="primary" onClick={() => submit()} disabled={draft.trim().length === 0}>
-							Send
+						<button
+							className="send"
+							onClick={() => submit()}
+							disabled={draft.trim().length === 0}
+							title="Send"
+							aria-label="Send"
+						>
+							<IconArrowUp />
 						</button>
 					)}
 				</div>
 			</div>
 
 			<div className="composer-foot">
-				<span>{state?.messageCount ?? 0} messages</span>
-				{state?.tokensPerSecond ? <span>{Math.round(state.tokensPerSecond)} tok/s</span> : null}
-				{state?.isCompacting ? <span>compacting…</span> : null}
-				{busy ? <span>enter queues a follow-up · ⌘enter steers</span> : null}
+				<span className="foot-badge">
+					<IconMessage />
+					{modeLabel(chrome.mode)}
+				</span>
+				{approval ? <span className="foot-muted">{approval} permissions</span> : null}
+				{state?.isCompacting ? <span className="foot-muted">compacting…</span> : null}
+				{busy ? <span className="foot-muted">enter queues · ⌘enter steers</span> : null}
+				<div className="composer-spacer" />
+				<span className="foot-item">
+					<IconFolder />
+					{project.name}
+				</span>
+				{chrome.branch ? (
+					<span className="foot-item">
+						<IconGitBranch />
+						{chrome.branch}
+					</span>
+				) : null}
 			</div>
 		</div>
 	);

@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::manager::{Manager, OpenResult};
 use crate::sessions::SessionSummary;
-use crate::types::{Project, UiAnswer};
+use crate::types::{Inventory, Project, UiAnswer};
 
 #[tauri::command]
 pub fn list_projects(manager: State<'_, Manager>) -> Vec<Project> {
@@ -100,6 +100,40 @@ pub fn switch_session(
 #[tauri::command]
 pub fn refresh_state(manager: State<'_, Manager>, id: String) -> Result<serde_json::Value, String> {
 	manager.refresh_state(&id)
+}
+
+/// The branch the project is on, when it is a git repository.
+#[tauri::command]
+pub fn branch(manager: State<'_, Manager>, id: String) -> Option<String> {
+	manager.branch(&id)
+}
+
+/// How the session behaves: `interactive` or `autopilot`.
+#[tauri::command]
+pub fn set_session_mode(
+	manager: State<'_, Manager>,
+	id: String,
+	mode: String,
+) -> Result<(), String> {
+	manager.set_session_mode(&id, &mode)
+}
+
+/// What the project has, for the sidebar's counts.
+#[tauri::command]
+pub fn inventory(manager: State<'_, Manager>, id: String) -> Result<Inventory, String> {
+	manager.inventory(&id)
+}
+
+/// The name of the user, for the greeting.
+#[tauri::command]
+pub fn user_name() -> String {
+	crate::project::user_name()
+}
+
+/// How omp asks before it acts, as configured.
+#[tauri::command]
+pub fn approval_mode() -> Option<String> {
+	crate::project::approval_mode()
 }
 
 #[tauri::command]
