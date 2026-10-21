@@ -1,38 +1,37 @@
 import Foundation
 
 /// A model, as omp describes it.
-public struct ModelInfo: Identifiable, Sendable, Equatable {
+///
+/// omp names a model by its selector, `provider/id`: the provider is the one
+/// that serves and bills it, so `anthropic/claude-opus-5-5` runs on an
+/// Anthropic login while `openrouter/anthropic/claude-opus-5.5` is billed to
+/// OpenRouter. The bare id is not unique — the same id can be offered by two
+/// providers — so the selector is what tells models apart.
+public struct ModelInfo: Sendable, Equatable {
     public var id: String
     public var name: String
     public var provider: String
+    public var selector: String
     public var contextWindow: Int?
 
-    public init(id: String, name: String, provider: String, contextWindow: Int? = nil) {
+    public init(id: String, name: String, provider: String, selector: String? = nil, contextWindow: Int? = nil) {
         self.id = id
         self.name = name
         self.provider = provider
+        self.selector = selector ?? (provider.isEmpty ? id : "\(provider)/\(id)")
         self.contextWindow = contextWindow
     }
 
     public init?(json: JSONValue) {
         guard let id = json["id"].optionalString else { return nil }
-        self.id = id
-        self.name = json["name"].optionalString ?? id
-        self.provider = json["provider"].optionalString ?? ""
-        self.contextWindow = json["contextWindow"].exactInteger
-    }
-
-    /// The vendor behind the model.
-    ///
-    /// A model served by a gateway carries its vendor in its id — Anthropic's
-    /// models, served by openrouter, are `anthropic/claude-3.7-sonnet` — so
-    /// that is what the reader is shown, and the gateway is the second half
-    /// of the id.
-    public var upstream: String {
-        guard let slash = id.firstIndex(of: "/") else { return provider }
-        var name = String(id[id.startIndex..<slash])
-        if name.hasPrefix("~") { name.removeFirst() }
-        return name
+        let provider = json["provider"].optionalString ?? ""
+        self.init(
+            id: id,
+            name: json["name"].optionalString ?? id,
+            provider: provider,
+            selector: json["selector"].optionalString,
+            contextWindow: json["contextWindow"].exactInteger
+        )
     }
 }
 

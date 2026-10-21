@@ -11,21 +11,21 @@ struct Select: View {
         var id: String
         var title: String
         var detail: String?
+        /// Said beside the title on the chip, when the title alone could name
+        /// two different things.
+        var badge: String?
 
-        init(id: String, title: String, detail: String? = nil) {
+        init(id: String, title: String, detail: String? = nil, badge: String? = nil) {
             self.id = id
             self.title = title
             self.detail = detail
+            self.badge = badge
         }
 
         /// What the row says when the pointer rests on it.
         var tip: String {
-            var text = title
-            if let detail, !detail.isEmpty { text += " — \(detail)" }
-            // A model's id carries the upstream it is served from, which is
-            // not always the provider that serves it.
-            if id != title, id.contains("/") { text += "  ·  \(id)" }
-            return text
+            guard let detail, !detail.isEmpty else { return title }
+            return "\(title) — \(detail)"
         }
     }
 
@@ -52,11 +52,10 @@ struct Select: View {
         return items.filter { Select.matches($0, needle) }
     }
 
-    /// Whether a row matches what the reader typed.
-    ///
-    /// The id is searched as well as the title and the provider: a model
-    /// served by openrouter from Anthropic is found by "anthropic", which is
-    /// how omp's own model list finds it.
+    /// Whether a row matches what the reader typed: its title, its detail or
+    /// its id. A model's id is its selector, so "anthropic" finds Anthropic's
+    /// own models and the ones other providers serve from it, as omp's model
+    /// list does.
     static func matches(_ item: Item, _ needle: String) -> Bool {
         let needle = needle.lowercased()
         guard !needle.isEmpty else { return true }
@@ -65,9 +64,9 @@ struct Select: View {
             || item.id.lowercased().contains(needle)
     }
 
-    private var title: String {
-        items.first { $0.id == selected }?.title ?? placeholder
-    }
+    private var current: Item? { items.first { $0.id == selected } }
+
+    private var title: String { current?.title ?? placeholder }
 
     var body: some View {
         Button {
@@ -80,6 +79,12 @@ struct Select: View {
                 Text(title)
                     .font(Theme.body(12))
                     .lineLimit(1)
+                if let badge = current?.badge {
+                    Text(badge)
+                        .font(Theme.body(11))
+                        .foregroundStyle(palette.inkFaint)
+                        .lineLimit(1)
+                }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(palette.inkFaint)
@@ -95,10 +100,10 @@ struct Select: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(help ?? "\(title) — choose another")
+        .help(help ?? "\(current?.tip ?? title) — choose another")
         .popover(isPresented: $open, arrowEdge: .bottom) {
             list
-                .frame(minWidth: 280, maxWidth: 380)
+                .frame(minWidth: 280, maxWidth: 440)
         }
     }
 
@@ -142,7 +147,7 @@ struct Select: View {
                                             .font(Theme.body(11))
                                             .foregroundStyle(palette.inkFaint)
                                             .lineLimit(1)
-                                            .truncationMode(.head)
+                                            .truncationMode(.middle)
                                     }
                                 }
                                 Spacer(minLength: 8)

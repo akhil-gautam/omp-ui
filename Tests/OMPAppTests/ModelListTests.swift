@@ -1,35 +1,37 @@
 import Testing
+import OMPCore
 @testable import OMPApp
 
-@Suite("The model list")
+@Suite("The model picker")
 struct ModelListTests {
-    /// A model served by openrouter, from Anthropic.
-    private let servedByOpenrouter = Select.Item(
-        id: "anthropic/claude-3.7-sonnet",
-        title: "Claude 3.7 Sonnet",
-        detail: "openrouter"
-    )
-
-    @Test("a model is found by the upstream that serves it")
-    func foundByItsUpstream() {
-        #expect(Select.matches(servedByOpenrouter, "anthropic"))
-        #expect(Select.matches(servedByOpenrouter, "claude"))
-        #expect(Select.matches(servedByOpenrouter, "openrouter"))
-        #expect(Select.matches(servedByOpenrouter, "3.7 sonnet"))
-        #expect(Select.matches(servedByOpenrouter, "ANTHROPIC"))
+    /// A row as the composer builds it from a model.
+    private func row(_ model: ModelInfo) -> Select.Item {
+        Select.Item(id: model.selector, title: model.name, detail: model.selector, badge: model.provider)
     }
 
-    @Test("a model is not found by what it is not")
-    func notFoundByWhatItIsNot() {
-        #expect(Select.matches(servedByOpenrouter, "gemini") == false)
-        #expect(Select.matches(servedByOpenrouter, "google") == false)
+    private let subscription = ModelInfo(id: "claude-opus-5-5", name: "Claude Opus 5.5", provider: "anthropic")
+    private let gateway = ModelInfo(id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", provider: "openrouter")
+
+    @Test("a model served through a gateway says so")
+    func theGatewayIsNamed() {
+        #expect(row(gateway).detail == "openrouter/anthropic/claude-opus-5.5")
+        #expect(row(gateway).badge == "openrouter")
+        #expect(row(subscription).detail == "anthropic/claude-opus-5-5")
+        #expect(row(subscription).badge == "anthropic")
+        #expect(row(subscription).id != row(gateway).id)
     }
 
-    @Test("a row's tooltip says where the model comes from")
-    func theTooltipSaysTheUpstream() {
-        #expect(servedByOpenrouter.tip == "Claude 3.7 Sonnet — openrouter  ·  anthropic/claude-3.7-sonnet")
-        // A model whose id is just its name has no upstream to add.
-        let direct = Select.Item(id: "claude-opus-4-6", title: "Claude Opus 4.6", detail: "google-antigravity")
-        #expect(direct.tip == "Claude Opus 4.6 — google-antigravity")
+    @Test("searching a vendor finds its own models and the gateways serving them")
+    func searchFindsBoth() {
+        #expect(Select.matches(row(subscription), "anthropic"))
+        #expect(Select.matches(row(gateway), "anthropic"))
+        #expect(Select.matches(row(gateway), "openrouter"))
+        #expect(Select.matches(row(subscription), "openrouter") == false)
+        #expect(Select.matches(row(subscription), "OPUS 5.5"))
+    }
+
+    @Test("a row's tooltip carries its selector")
+    func theTooltipCarriesTheSelector() {
+        #expect(row(gateway).tip == "Claude Opus 5.5 — openrouter/anthropic/claude-opus-5.5")
     }
 }

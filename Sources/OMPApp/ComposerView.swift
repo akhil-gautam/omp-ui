@@ -140,15 +140,18 @@ struct ComposerView: View {
     private var modelChip: some View {
         Select(
             icon: "bolt",
+            // As omp lists them: every model is its selector, `provider/id`,
+            // and the chip names the provider so a subscription model and the
+            // same model through a gateway never look alike.
             items: (session?.modelList ?? []).map { model in
-                Select.Item(id: model.id, title: model.name, detail: model.upstream)
+                Select.Item(id: model.selector, title: model.name, detail: model.selector, badge: model.provider)
             },
-            selected: session?.model?.id,
+            selected: session?.model?.selector,
             placeholder: "No model",
             plain: true,
-            help: "The model that answers"
-        ) { model in
-            if let found = session?.modelList.first(where: { $0.id == model.id }) {
+            help: session?.model.map { "\($0.selector) — the model that answers" } ?? "The model that answers"
+        ) { item in
+            if let found = session?.modelList.first(where: { $0.selector == item.id }) {
                 Task { await store.setModel(found) }
             }
         }
