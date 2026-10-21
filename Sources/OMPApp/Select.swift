@@ -20,8 +20,12 @@ struct Select: View {
 
         /// What the row says when the pointer rests on it.
         var tip: String {
-            guard let detail, !detail.isEmpty else { return title }
-            return "\(title) — \(detail)"
+            var text = title
+            if let detail, !detail.isEmpty { text += " — \(detail)" }
+            // A model's id carries the upstream it is served from, which is
+            // not always the provider that serves it.
+            if id != title, id.contains("/") { text += "  ·  \(id)" }
+            return text
         }
     }
 
@@ -43,11 +47,22 @@ struct Select: View {
     private var searches: Bool { items.count > 12 }
 
     private var filtered: [Item] {
-        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let needle = query.trimmingCharacters(in: .whitespaces)
         guard !needle.isEmpty else { return items }
-        return items.filter {
-            $0.title.lowercased().contains(needle) || ($0.detail?.lowercased().contains(needle) ?? false)
-        }
+        return items.filter { Select.matches($0, needle) }
+    }
+
+    /// Whether a row matches what the reader typed.
+    ///
+    /// The id is searched as well as the title and the provider: a model
+    /// served by openrouter from Anthropic is found by "anthropic", which is
+    /// how omp's own model list finds it.
+    static func matches(_ item: Item, _ needle: String) -> Bool {
+        let needle = needle.lowercased()
+        guard !needle.isEmpty else { return true }
+        return item.title.lowercased().contains(needle)
+            || (item.detail?.lowercased().contains(needle) ?? false)
+            || item.id.lowercased().contains(needle)
     }
 
     private var title: String {

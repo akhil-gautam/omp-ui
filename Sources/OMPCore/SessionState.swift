@@ -21,6 +21,19 @@ public struct ModelInfo: Identifiable, Sendable, Equatable {
         self.provider = json["provider"].optionalString ?? ""
         self.contextWindow = json["contextWindow"].exactInteger
     }
+
+    /// The vendor behind the model.
+    ///
+    /// A model served by a gateway carries its vendor in its id — Anthropic's
+    /// models, served by openrouter, are `anthropic/claude-3.7-sonnet` — so
+    /// that is what the reader is shown, and the gateway is the second half
+    /// of the id.
+    public var upstream: String {
+        guard let slash = id.firstIndex(of: "/") else { return provider }
+        var name = String(id[id.startIndex..<slash])
+        if name.hasPrefix("~") { name.removeFirst() }
+        return name
+    }
 }
 
 /// How much of the context window is in use.

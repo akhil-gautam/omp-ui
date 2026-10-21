@@ -70,6 +70,8 @@ has sessions on disk, the most recent one is resumed.
 - **Twenty themes.** The picker in the top bar changes the whole interface:
   a ground, a set of greys and one accent. The choice is remembered. The
   default is a white page and a grey rail, the way a document is.
+- **The model list.** Every model omp offers, labelled by the vendor behind
+  it, and searchable by name, by vendor or by the id omp gives it.
 - **A window that runs to its edges.** The content begins at the top of the
   window with the traffic lights drawn over it, the way a browser's does.
 - **Live state.** The plan omp is working through, context usage, message

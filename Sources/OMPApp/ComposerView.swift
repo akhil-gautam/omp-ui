@@ -141,7 +141,7 @@ struct ComposerView: View {
         Select(
             icon: "bolt",
             items: (session?.modelList ?? []).map { model in
-                Select.Item(id: model.id, title: model.name, detail: model.provider)
+                Select.Item(id: model.id, title: model.name, detail: model.upstream)
             },
             selected: session?.model?.id,
             placeholder: "No model",
