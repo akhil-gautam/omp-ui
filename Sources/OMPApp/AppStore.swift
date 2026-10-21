@@ -389,9 +389,9 @@ public final class AppStore {
     private func append(to session: ProjectSession, id: String, text: String, kind: Channel) {
         if let index = session.blocks.firstIndex(where: { $0.id == id }) {
             switch session.blocks[index] {
-            case .text(let blockID, var body):
+            case .text(let blockID, let body):
                 session.blocks[index] = .text(id: blockID, text: body + text)
-            case .thinking(let blockID, var body):
+            case .thinking(let blockID, let body):
                 session.blocks[index] = .thinking(id: blockID, text: body + text)
             default:
                 break

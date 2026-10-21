@@ -17,6 +17,12 @@ struct Select: View {
             self.title = title
             self.detail = detail
         }
+
+        /// What the row says when the pointer rests on it.
+        var tip: String {
+            guard let detail, !detail.isEmpty else { return title }
+            return "\(title) — \(detail)"
+        }
     }
 
     let icon: String
@@ -25,6 +31,8 @@ struct Select: View {
     let placeholder: String
     /// A header chip has no plate of its own.
     var plain = false
+    /// What the chip is for, shown when the pointer rests on it.
+    var help: String?
     let onSelect: (Item) -> Void
 
     @State private var open = false
@@ -71,6 +79,7 @@ struct Select: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
+        .help(help ?? "\(title) — choose another")
         .popover(isPresented: $open, arrowEdge: .bottom) {
             list
                 .frame(minWidth: 280, maxWidth: 380)
@@ -88,6 +97,7 @@ struct Select: View {
                         .textFieldStyle(.plain)
                         .font(Theme.body(12.5))
                         .foregroundStyle(palette.ink)
+                        .help("Type to narrow the list")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
@@ -134,6 +144,7 @@ struct Select: View {
                         }
                         .buttonStyle(.plain)
                         .focusable(false)
+                        .help(item.tip)
                     }
                     if filtered.isEmpty {
                         Text("Nothing matches.")

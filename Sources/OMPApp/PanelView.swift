@@ -143,14 +143,16 @@ struct DialogView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .focusable(false)
+                        .help(option.description ?? option.label)
                     }
                 }
             } else if request.method == "confirm" {
                 HStack(spacing: 8) {
-                    ConfirmButton(title: "Yes", tone: palette.accent) {
+                    ConfirmButton(title: "Yes", tone: palette.accent, help: "Let omp go ahead") {
                         Task { await store.answer(request, value: "yes") }
                     }
-                    ConfirmButton(title: "No", tone: palette.inkDim) {
+                    ConfirmButton(title: "No", tone: palette.inkDim, help: "Decline, and tell omp no") {
                         Task { await store.answer(request, value: "no") }
                     }
                 }
@@ -167,7 +169,8 @@ struct DialogView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(palette.hairline, lineWidth: 1)
                     }
-                ConfirmButton(title: "Send", tone: palette.accent) {
+                    .help("Your answer goes back to omp")
+                ConfirmButton(title: "Send", tone: palette.accent, help: "Send your answer to omp") {
                     Task { await store.answer(request, value: text) }
                 }
             } else if request.method == "open_url", let url = request.launchURL {
@@ -175,12 +178,12 @@ struct DialogView: View {
                     .font(Theme.code(12))
                     .foregroundStyle(palette.inkDim)
                     .textSelection(.enabled)
-                ConfirmButton(title: "Dismiss", tone: palette.inkDim) {
+                ConfirmButton(title: "Dismiss", tone: palette.inkDim, help: "Close the request without opening it") {
                     Task { await store.answer(request, value: "", cancelled: true) }
                 }
             }
 
-            ConfirmButton(title: "Cancel", tone: palette.inkFaint) {
+            ConfirmButton(title: "Cancel", tone: palette.inkFaint, help: "Cancel this request") {
                 Task { await store.answer(request, value: "", cancelled: true) }
             }
         }
@@ -199,6 +202,8 @@ struct DialogView: View {
 struct ConfirmButton: View {
     let title: String
     let tone: Color
+    /// What the button does, shown when the pointer rests on it.
+    let help: String
     let action: () -> Void
 
     @Environment(\.palette) private var palette
@@ -215,5 +220,6 @@ struct ConfirmButton: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
+        .help(help)
     }
 }

@@ -75,6 +75,8 @@ struct CodeBlock: View {
                         .tracking(0.12)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
+                .help("Copy the code")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)

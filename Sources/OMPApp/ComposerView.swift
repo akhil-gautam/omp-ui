@@ -68,6 +68,7 @@ struct ComposerView: View {
                 .frame(minHeight: 44, alignment: .topLeading)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
+                .help("Write to the agent. Return sends it.")
                 .onSubmit(send)
 
             HStack(spacing: 6) {
@@ -147,7 +148,8 @@ struct ComposerView: View {
                 Select.Item(id: model.id, title: model.name, detail: model.provider)
             },
             selected: session?.model?.id,
-            placeholder: "No model"
+            placeholder: "No model",
+            help: "The model that answers"
         ) { model in
             if let found = session?.modelList.first(where: { $0.id == model.id }) {
                 Task { await store.setModel(found) }
@@ -162,7 +164,8 @@ struct ComposerView: View {
                 Select.Item(id: mode.rawValue, title: mode.label, detail: mode.hint)
             },
             selected: session?.mode.rawValue,
-            placeholder: "Interactive"
+            placeholder: "Interactive",
+            help: session?.mode.hint ?? "How messages reach a running turn"
         ) { mode in
             Task { await store.setMode(SessionMode(rawValue: mode.id) ?? .interactive) }
         }
@@ -175,7 +178,8 @@ struct ComposerView: View {
                 Select.Item(id: level, title: level.capitalized)
             },
             selected: session?.thinkingLevel,
-            placeholder: "Off"
+            placeholder: "Off",
+            help: "How much the model thinks before it answers"
         ) { level in
             Task { await store.setThinking(level.id) }
         }

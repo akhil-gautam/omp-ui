@@ -90,19 +90,19 @@ struct SidebarView: View {
 
     private var customizations: some View {
         VStack(alignment: .leading, spacing: 1) {
-            CustomizationRow(title: "Overview", count: nil, isActive: store.view == .overview) {
+            CustomizationRow(title: "Overview", help: "What this project is", count: nil, isActive: store.view == .overview) {
                 store.view = .overview
             }
-            CustomizationRow(title: "Tools", count: store.active?.inventory?.tools.count, isActive: store.view == .tools) {
+            CustomizationRow(title: "Tools", help: "The tools omp can use here", count: store.active?.inventory?.tools.count, isActive: store.view == .tools) {
                 store.view = .tools
             }
-            CustomizationRow(title: "Skills", count: store.active?.inventory?.skills.count, isActive: store.view == .skills) {
+            CustomizationRow(title: "Skills", help: "The skills available here", count: store.active?.inventory?.skills.count, isActive: store.view == .skills) {
                 store.view = .skills
             }
-            CustomizationRow(title: "Extensions", count: store.active?.inventory?.extensions.count, isActive: store.view == .extensions) {
+            CustomizationRow(title: "Extensions", help: "The extensions loaded here", count: store.active?.inventory?.extensions.count, isActive: store.view == .extensions) {
                 store.view = .extensions
             }
-            CustomizationRow(title: "Prompts", count: store.active?.inventory?.prompts.count, isActive: store.view == .prompts) {
+            CustomizationRow(title: "Prompts", help: "The prompt templates here", count: store.active?.inventory?.prompts.count, isActive: store.view == .prompts) {
                 store.view = .prompts
             }
         }
@@ -150,6 +150,7 @@ private struct ProjectRow: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .onHover { hovering = $0 }
+        .help("Open \(project.name)")
     }
 
     private var colour: Color {
@@ -167,6 +168,8 @@ private struct ProjectRow: View {
 private struct CustomizationRow: View {
     @Environment(\.palette) private var palette
     let title: String
+    /// What the page holds, shown when the pointer rests on it.
+    let help: String
     let count: Int?
     let isActive: Bool
     let action: () -> Void
@@ -202,5 +205,6 @@ private struct CustomizationRow: View {
         .buttonStyle(.plain)
         .focusable(false)
         .onHover { hovering = $0 }
+        .help(help)
     }
 }

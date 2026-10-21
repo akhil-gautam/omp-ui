@@ -14,5 +14,14 @@ struct OMPApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 820)
+        .commands {
+            // The button in the sidebar offers ⌘N, so the menu has to keep it.
+            CommandGroup(after: .newItem) {
+                Button("New Project") {
+                    Task { await store.addProjectPicker() }
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+        }
     }
 }

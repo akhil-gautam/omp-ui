@@ -116,7 +116,8 @@ struct TopBarView: View {
                         Select.Item(id: palette.name, title: palette.name, detail: palette.isLight ? "light" : "dark")
                     },
                     selected: store.themeName,
-                    placeholder: "Theme"
+                    placeholder: "Theme",
+                    help: "The colours of the interface"
                 ) { item in
                     store.themeName = item.id
                 }
@@ -195,6 +196,8 @@ struct BannerView: View {
                     .foregroundStyle(palette.inkDim)
             }
             .buttonStyle(.plain)
+            .focusable(false)
+            .help("Dismiss")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

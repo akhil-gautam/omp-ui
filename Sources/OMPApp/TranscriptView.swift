@@ -183,6 +183,7 @@ struct ToolCallView: View {
             .buttonStyle(.plain)
             .focusable(false)
             .onHover { hovering = $0 }
+            .help(expanded ? "Hide the arguments and the result" : "Show the arguments and the result")
 
             if expanded {
                 if let edit = EditChange(args: args) {
