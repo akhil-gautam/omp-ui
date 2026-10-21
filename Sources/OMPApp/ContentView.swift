@@ -1,24 +1,6 @@
 import SwiftUI
 import OMPCore
 
-/// The mark omp wears.
-struct BrandMark: View {
-    @Environment(\.palette) private var palette
-    var size: CGFloat = 14
-
-    var body: some View {
-        HStack(spacing: size * 0.18) {
-            ForEach(0..<2, id: \.self) { _ in
-                VStack(spacing: 0) {
-                    Rectangle().frame(width: size * 0.62, height: size * 0.16)
-                    Rectangle().frame(width: size * 0.2, height: size * 0.72)
-                }
-            }
-        }
-        .foregroundStyle(palette.accent)
-    }
-}
-
 /// The narrow strip on the far left.
 struct IconRail: View {
     @Environment(\.palette) private var palette
@@ -114,7 +96,7 @@ struct TopBarView: View {
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 7) {
-                BrandMark(size: 13)
+                BrandMark(width: 17)
                 Text("omp")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(palette.ink)

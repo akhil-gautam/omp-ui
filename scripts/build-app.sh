@@ -8,12 +8,14 @@ APP_DIR="$PWD/dist/omp-ui.app"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp .build/release/omp-ui "$APP_DIR/Contents/MacOS/omp-ui"
+cp Resources/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 VERSION=$(cat VERSION)
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>omp-ui</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleIdentifier</key><string>sh.omp.ui</string>
 <key>CFBundleName</key><string>omp-ui</string>
 <key>CFBundleDisplayName</key><string>omp-ui</string>
