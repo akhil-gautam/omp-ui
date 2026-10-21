@@ -19,6 +19,13 @@ describe("renderMarkdown", () => {
 		expect(html).toMatch(/<span class="hljs/);
 	});
 
+	it("reads the language out of a fence with extra labels", () => {
+		const html = renderMarkdown("```rust,ignore {1,3}\nfn main() {}\n```");
+
+		expect(html).toContain("hljs");
+		expect(html).toContain("rust");
+	});
+
 	it("escapes code in a language it does not recognise", () => {
 		const html = renderMarkdown("```notalanguage\n<script>alert(1)</script>\n```");
 

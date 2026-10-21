@@ -131,7 +131,7 @@ const resolveLanguage = (raw: string | undefined): string | null => {
 		return null;
 	}
 	// Fences carry more than a name: ```rust,ignore {1,3} or ``` rust title=…
-	const head = raw.trim().split(/[\s:{]/)[0]?.toLowerCase() ?? "";
+	const head = raw.trim().split(/[\s:{,]/)[0]?.toLowerCase() ?? "";
 	if (!head) {
 		return null;
 	}
