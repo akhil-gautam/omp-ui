@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import * as api from "./api";
-import { sessionStateSchema, type Inventory, type ModelListEntry, type SessionSummary, type UiEvent } from "./schema";
+import { type Inventory, type ModelListEntry, type SessionSummary, type UiEvent } from "./schema";
 import { initialStore, reducer } from "./store";
 import Composer, { type ComposerChrome } from "./components/Composer";
 import IconRail from "./components/IconRail";
@@ -78,12 +78,9 @@ export default function App() {
 		void api
 			.refreshState(event.projectId)
 			.then((state) => {
-				const parsed = sessionStateSchema.safeParse(state);
-				if (parsed.success) {
-					dispatch({ type: "state", projectId: event.projectId, state: parsed.data });
-				}
+				dispatch({ type: "state", projectId: event.projectId, state });
 			})
-			.catch(() => undefined);
+			.catch((error: unknown) => setBanner(String(error)));
 	}, []);
 
 	const openProject = useCallback(async (id: string) => {

@@ -46,12 +46,20 @@ export const todoPhaseSchema = z.object({
 });
 export type TodoPhase = z.infer<typeof todoPhaseSchema>;
 
+/**
+ * A model, as omp describes it.
+ *
+ * omp writes `null` for the values it does not have — a provider that
+ * reports no context window, for one — so these are nullish rather than
+ * merely optional.
+ */
 export const modelSchema = z.object({
 	id: z.string(),
-	name: z.string().optional(),
-	provider: z.string().optional(),
-	api: z.string().optional(),
-	contextWindow: z.number().optional(),
+	name: z.string().nullish(),
+	provider: z.string().nullish(),
+	api: z.string().nullish(),
+	/** Null when the provider does not report a limit. */
+	contextWindow: z.number().nullish(),
 });
 export type ModelInfo = z.infer<typeof modelSchema>;
 
@@ -64,17 +72,18 @@ export type ContextUsage = z.infer<typeof contextUsageSchema>;
 
 export const sessionStateSchema = z.object({
 	sessionId: z.string().default(""),
-	sessionName: z.string().optional(),
-	sessionFile: z.string().optional(),
-	model: modelSchema.optional(),
-	thinkingLevel: z.string().optional(),
+	sessionName: z.string().nullish(),
+	sessionFile: z.string().nullish(),
+	model: modelSchema.nullish(),
+	thinkingLevel: z.string().nullish(),
 	isStreaming: z.boolean().default(false),
 	isCompacting: z.boolean().default(false),
 	isSettled: z.boolean().default(true),
 	messageCount: z.number().default(0),
 	queuedMessageCount: z.number().default(0),
-	tokensPerSecond: z.number().optional(),
-	contextUsage: contextUsageSchema.optional(),
+	/** Null while nothing is streaming. */
+	tokensPerSecond: z.number().nullish(),
+	contextUsage: contextUsageSchema.nullish(),
 	todoPhases: z.array(todoPhaseSchema).default([]),
 	queuedMessages: z
 		.object({ steering: z.array(z.string()).default([]), followUp: z.array(z.string()).default([]) })
@@ -249,15 +258,7 @@ export const subagentSchema = z.object({
 });
 export type SubagentEvent = z.infer<typeof subagentSchema>;
 
-export const modelListSchema = z.array(
-	z.object({
-		id: z.string(),
-		name: z.string().optional(),
-		provider: z.string().optional(),
-		api: z.string().optional(),
-		contextWindow: z.number().optional(),
-	}),
-);
+export const modelListSchema = z.array(modelSchema);
 export type ModelListEntry = z.infer<typeof modelListSchema>[number];
 
 /** Every event the backend pushes on `omp://event`. */

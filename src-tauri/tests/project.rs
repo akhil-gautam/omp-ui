@@ -57,6 +57,13 @@ fn a_directory_without_git_has_no_branch() {
 }
 
 #[test]
+fn the_greeting_uses_the_account_name() {
+	assert_eq!(project::first_name("Akhil Gautam,,,"), "Akhil Gautam");
+	assert_eq!(project::first_name("Akhil Gautam"), "Akhil Gautam");
+	assert_eq!(project::first_name(""), "");
+}
+
+#[test]
 fn the_approval_mode_is_read_from_the_configuration() {
 	assert_eq!(project::parse_approval_mode("approvalMode: always-ask\n").as_deref(), Some("always-ask"));
 	assert_eq!(project::parse_approval_mode("  approvalMode: \"yolo\"\n").as_deref(), Some("yolo"));

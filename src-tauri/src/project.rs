@@ -17,11 +17,44 @@ pub fn branch(path: &Path) -> Option<String> {
 	(head.len() >= 7).then(|| head[..7].to_owned())
 }
 
-/// The name of the user, for the greeting.
+/// The name the system knows the user by, for the greeting.
+///
+/// macOS keeps the person's name in the account's comment field, as a
+/// comma-separated list: "Akhil Gautam,,,". The login name is of no use
+/// here — it reads like a machine.
 pub fn user_name() -> String {
+	let raw = account_comment();
+	let name = first_name(&raw);
+	if !name.is_empty() {
+		return name;
+	}
+	// No account name to be had: the home directory will do.
 	crate::omp_bin::home_dir()
 		.and_then(|home| home.file_name().map(|name| name.to_string_lossy().into_owned()))
 		.unwrap_or_default()
+}
+
+/// The comment field of the current account, if there is one.
+fn account_comment() -> String {
+	unsafe {
+		let entry = libc::getpwuid(libc::getuid());
+		if entry.is_null() {
+			return String::new();
+		}
+		let comment = (*entry).pw_gecos as *const libc::c_char;
+		if comment.is_null() {
+			return String::new();
+		}
+		std::ffi::CStr::from_ptr(comment).to_string_lossy().into_owned()
+	}
+}
+
+/// The part of a name before the first comma.
+///
+/// macOS keeps a comma-separated list in the account's name field:
+/// "Akhil Gautam,,,".
+pub fn first_name(raw: &str) -> String {
+	raw.split(',').next().unwrap_or_default().trim().to_owned()
 }
 
 /// How omp asks before it acts, read from its own configuration.
