@@ -32,7 +32,12 @@ struct TranscriptView: View {
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: store.active?.blocks.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                // The rows have to be laid out before the scroll means
+                // anything, so the jump waits a beat.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(80))
+                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
         }
     }

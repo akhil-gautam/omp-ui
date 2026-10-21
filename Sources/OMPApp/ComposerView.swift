@@ -19,7 +19,7 @@ struct ComposerView: View {
             footer
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 14)
+        .padding(.bottom, 16)
     }
 
     // MARK: - The queue
@@ -58,7 +58,7 @@ struct ComposerView: View {
     // MARK: - The card
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             modelChip
 
             TextField("Pitch your idea", text: $draft, axis: .vertical)
@@ -67,6 +67,7 @@ struct ComposerView: View {
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1...8)
                 .focused($focused)
+                .frame(minHeight: 44, alignment: .topLeading)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .onSubmit(send)
@@ -130,12 +131,13 @@ struct ComposerView: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
         .frame(maxWidth: Theme.contentWidth)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(focused ? Theme.accentLine : Theme.hairline, lineWidth: 1)
         }
     }
@@ -203,7 +205,7 @@ struct ComposerView: View {
             }
         }
         .frame(maxWidth: Theme.contentWidth)
-        .padding(.top, 9)
+        .padding(.top, 12)
     }
 
     private func send() {
