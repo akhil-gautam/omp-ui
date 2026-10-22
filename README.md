@@ -137,7 +137,9 @@ has sessions on disk, the most recent one is resumed.
   a headline sits in its light with a few ways to begin and the name set
   enormous beneath them, and faint behind a conversation. Every surface is
   glass lit along its top edge, and labels sit in pills — in all twenty
-  themes, drawn from each theme's own colours.
+  themes, drawn from each theme's own colours. While an agent works, now and
+  then a star falls across the sky over the page — one every twenty to thirty
+  seconds, none with Reduce Motion on.
 - **The top bar.** The project and its agent's status in a pill at the
   centre, with back and forward beside it.
 - **The conversation.** What you said is a bubble on the right. The agent's

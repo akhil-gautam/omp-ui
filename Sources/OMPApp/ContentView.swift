@@ -87,8 +87,12 @@ struct ContentView: View {
             // The lamp over the page: bright over an empty one, faint
             // behind a conversation so it never competes with the words.
             .background(alignment: .top) {
-                Spotlight(strength: store.active?.blocks.isEmpty ?? true ? 1 : 0.35)
-                    .animation(.easeOut(duration: 0.6), value: store.active?.blocks.isEmpty ?? true)
+                ZStack(alignment: .top) {
+                    Spotlight(strength: store.active?.blocks.isEmpty ?? true ? 1 : 0.35)
+                        .animation(.easeOut(duration: 0.6), value: store.active?.blocks.isEmpty ?? true)
+                    // Now and then a star falls while the agent works.
+                    MeteorShower(active: store.active?.isWorking ?? false)
+                }
             }
         }
         .environment(\.palette, store.palette)
