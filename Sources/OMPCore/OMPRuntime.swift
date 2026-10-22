@@ -4,8 +4,12 @@ import Foundation
 public enum OMPBinary {
     /// Points at an explicit omp executable, bypassing the search.
     public static let overrideVariable = "OMP_UI_OMP_BIN"
+    /// Where the reader pointed the app at omp themselves; an app opened from
+    /// the Dock cannot be handed an environment variable.
+    public static let chosenKey = "omp-ui.omp-path"
 
-    /// Locations searched when omp is not on PATH.
+    /// Locations searched when omp is not on PATH: where omp's installer puts
+    /// it with Bun and without, and where Homebrew does.
     static let fallbacks = [
         "~/.bun/bin/omp",
         "~/.local/bin/omp",
@@ -14,12 +18,14 @@ public enum OMPBinary {
         "/usr/bin/omp",
     ]
 
-    /// The absolute path of the omp executable.
-    public static func resolve() -> String? {
+    /// The absolute path of the omp executable: the environment's override,
+    /// then the one the reader chose, then the PATH, then the usual places.
+    public static func resolve(chosen: String? = UserDefaults.standard.string(forKey: chosenKey)) -> String? {
         let environment = ProcessInfo.processInfo.environment
         if let raw = environment[overrideVariable], !raw.isEmpty {
             return FileManager.default.fileExists(atPath: raw) ? raw : nil
         }
+        if let chosen, FileManager.default.isExecutableFile(atPath: chosen) { return chosen }
         for directory in (environment["PATH"] ?? "").split(separator: ":") {
             let candidate = "\(directory)/omp"
             if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
@@ -29,6 +35,46 @@ public enum OMPBinary {
             if FileManager.default.isExecutableFile(atPath: path) { return path }
         }
         return nil
+    }
+}
+
+/// Installing omp the ways its own README gives for a Mac.
+public enum OMPInstaller {
+    /// The official installer: Bun when it is there, the prebuilt binary,
+    /// checked against its SHA-256, when it is not.
+    public static let command = "curl -fsSL https://omp.sh/install | sh"
+    public static let homebrew = "brew install can1357/tap/omp"
+    public static let bun = "bun install -g @oh-my-pi/pi-coding-agent"
+
+    /// Runs a shell command, handing over each line it prints as it prints
+    /// it, and returns its exit status. An app opened from the Dock has a
+    /// bare PATH, so the places Bun and Homebrew live are put on it.
+    public static func run(_ command: String = command, onLine: @Sendable (String) async -> Void) async -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        var environment = ProcessInfo.processInfo.environment
+        let home = NSHomeDirectory()
+        environment["PATH"] = ["\(home)/.bun/bin", "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
+                               environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"].joined(separator: ":")
+        process.environment = environment
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        process.standardInput = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            await onLine("The installer could not start: \(error.localizedDescription)")
+            return -1
+        }
+        do {
+            for try await line in output.fileHandleForReading.bytes.lines { await onLine(line) }
+        } catch {
+            await onLine("Reading the installer's output failed: \(error.localizedDescription)")
+        }
+        while process.isRunning { try? await Task.sleep(for: .milliseconds(50)) }
+        return process.terminationStatus
     }
 }
 

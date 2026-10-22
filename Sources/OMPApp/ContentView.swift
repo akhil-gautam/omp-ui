@@ -110,19 +110,26 @@ struct ContentView: View {
     }
 }
 
-/// The column that holds the transcript and the composer.
+/// The column that holds the transcript and the composer — or, on a Mac
+/// without omp, the way to install it.
 struct MainColumn: View {
     @Bindable var store: AppStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            TranscriptView(store: store)
-            ComposerView(store: store)
+        Group {
+            if store.ompMissing {
+                SetupView(store: store)
+            } else {
+                VStack(spacing: 0) {
+                    TranscriptView(store: store)
+                    ComposerView(store: store)
+                }
+            }
         }
         // The name, enormous and fading as it falls, in the empty band
         // between the page and the composer.
         .background(alignment: .bottom) {
-            if store.active?.blocks.isEmpty ?? true {
+            if !store.ompMissing, store.active?.blocks.isEmpty ?? true {
                 Wordmark()
                     .offset(y: -96)
                     .transition(.opacity)

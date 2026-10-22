@@ -101,11 +101,22 @@ public final class AppStore {
     public var sidebarOpen = true
 
     @ObservationIgnored private let store: ProjectStore
-    @ObservationIgnored private let executable: String?
+    /// Finds omp. Asked at every start, so omp installed while the app is
+    /// open is found without a relaunch.
+    @ObservationIgnored private let locate: () -> String?
 
-    public init(store: ProjectStore = ProjectStore()) {
+    /// Whether omp was missing the last time it was looked for; the window
+    /// then shows how to install it instead of a conversation.
+    public var ompMissing = false
+    /// What the installer has printed so far.
+    public var installLog: [String] = []
+    public var installing = false
+    /// Why the last install did not leave a usable omp behind.
+    public var installFailure: String?
+
+    public init(store: ProjectStore = ProjectStore(), locate: @escaping () -> String? = { OMPBinary.resolve() }) {
         self.store = store
-        self.executable = OMPBinary.resolve()
+        self.locate = locate
     }
 
     public var active: ProjectSession? {
@@ -135,6 +146,7 @@ public final class AppStore {
         self.projects = projects
         self.activeID = activeID
         isLoading = false
+        ompMissing = locate() == nil
         if let activeID, projects.contains(where: { $0.id == activeID }) {
             await open(activeID)
         }
@@ -180,11 +192,13 @@ public final class AppStore {
             await stale.stop()
         }
 
-        guard let executable else {
-            session.status = .error
-            session.error = "omp was not found. Install it (https://omp.sh) or set \(OMPBinary.overrideVariable)."
+        guard let executable = locate() else {
+            // Not a failure of the project: the setup screen takes over.
+            session.status = .stopped
+            ompMissing = true
             return
         }
+        ompMissing = false
 
         let id = project.id
         let process = AgentProcess(project: project, executable: executable) { [weak self] frame in
@@ -212,6 +226,51 @@ public final class AppStore {
             await process.stop()
             session.status = .error
             session.error = error.localizedDescription
+        }
+    }
+
+    // MARK: - Installing omp
+
+    /// Looks for omp again — after it was installed, or pointed at — and
+    /// starts the open project with it.
+    public func checkForOMP() async {
+        ompMissing = locate() == nil
+        guard !ompMissing else { return }
+        installFailure = nil
+        if let activeID { await open(activeID) }
+    }
+
+    /// Uses an omp the reader chose, and remembers it.
+    public func chooseOMP(at path: String) async {
+        guard FileManager.default.isExecutableFile(atPath: path) else {
+            installFailure = "\(path) is not a program the app can run."
+            return
+        }
+        UserDefaults.standard.set(path, forKey: OMPBinary.chosenKey)
+        await checkForOMP()
+        if ompMissing {
+            installFailure = "The app still cannot use \(path)."
+        }
+    }
+
+    /// Runs omp's official installer, showing what it prints, then starts
+    /// the open project with the omp it installed.
+    public func installOMP(command: String = OMPInstaller.command) async {
+        guard !installing else { return }
+        installing = true
+        installFailure = nil
+        installLog = ["$ \(command)"]
+        let status = await OMPInstaller.run(command) { line in
+            await MainActor.run { self.installLog.append(line) }
+        }
+        installing = false
+        guard status == 0 else {
+            installFailure = "The installer stopped with status \(status). Its output is above."
+            return
+        }
+        await checkForOMP()
+        if ompMissing {
+            installFailure = "omp was installed, but not where the app looks for it. Use Choose omp… to point at it."
         }
     }
 

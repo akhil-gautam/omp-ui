@@ -19,9 +19,13 @@ JSON over stdio — and streams everything they produce into the window.
 ## Requirements
 
 - macOS 14 or newer.
-- [omp](https://omp.sh) installed and on `PATH` (`omp --version` should work).
-  Set `OMP_UI_OMP_BIN` to point at the executable if it lives somewhere else.
-- Model credentials for omp (`omp models` should list at least one).
+- [omp](https://omp.sh). If it is not installed, the app says so on first
+  launch and installs it with omp's official installer at the press of a
+  button, or shows the Homebrew and Bun commands. It finds omp where omp's
+  installer, Homebrew and Bun put it; *Choose omp…* points it at one anywhere
+  else, and `OMP_UI_OMP_BIN` overrides both.
+- Model credentials for omp (`omp models` should list at least one): run `omp`
+  once in Terminal and sign in with `/login`.
 
 ## Running it
 

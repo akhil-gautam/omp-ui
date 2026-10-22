@@ -60,9 +60,7 @@ struct LifecycleTests {
         let project = root.appendingPathComponent("project")
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         let fake = try makeFakeOMP(in: root)
-        setenv(OMPBinary.overrideVariable, fake.path, 1)
-        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")))
-        unsetenv(OMPBinary.overrideVariable)
+        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")), locate: { fake.path })
         await store.addProject(path: project.path)
         let session = try #require(store.active)
         return (store, session, root)
@@ -162,5 +160,93 @@ struct LifecycleTests {
         await store.send("/model")
         #expect(!session.isWorking)
         await store.close(session.project.id)
+    }
+}
+
+@Suite("A Mac without omp", .serialized)
+@MainActor
+struct SetupTests {
+    /// A store whose omp is wherever `place` says, once something is there.
+    private func makeStore(place: URL) async throws -> (AppStore, URL) {
+        let root = place.deletingLastPathComponent()
+        let project = root.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let store = AppStore(
+            store: ProjectStore(url: root.appendingPathComponent("projects.json")),
+            locate: { FileManager.default.isExecutableFile(atPath: place.path) ? place.path : nil }
+        )
+        await store.addProject(path: project.path)
+        return (store, root)
+    }
+
+    private func scratch() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-setup-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    @Test("without omp the setup screen takes over, and nothing is reported as an error")
+    func missingIsNotAnError() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (store, _) = try await makeStore(place: root.appendingPathComponent("bin/omp"))
+        #expect(store.ompMissing)
+        #expect(store.banner == nil)
+        #expect(store.active?.error == nil)
+        #expect(store.active?.status == .stopped)
+    }
+
+    @Test("omp installed while the app is open is found without a relaunch")
+    func foundWithoutRelaunch() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let place = root.appendingPathComponent("omp")
+        let (store, _) = try await makeStore(place: place)
+        #expect(store.ompMissing)
+
+        try FileManager.default.copyItem(at: try makeFakeOMP(in: try scratch()), to: place)
+        await store.checkForOMP()
+        #expect(!store.ompMissing)
+        #expect(await store.active?.process?.isRunning() == true)
+        await store.close(store.active!.project.id)
+    }
+
+    @Test("the installer's output is shown as it runs, and a failed install says so")
+    func failedInstallSaysSo() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (store, _) = try await makeStore(place: root.appendingPathComponent("omp"))
+
+        await store.installOMP(command: "echo fetching omp; echo checksum failed >&2; exit 3")
+        #expect(store.installLog == ["$ echo fetching omp; echo checksum failed >&2; exit 3", "fetching omp", "checksum failed"])
+        #expect(store.installFailure?.contains("status 3") == true)
+        #expect(!store.installing)
+        #expect(store.ompMissing)
+    }
+
+    @Test("an install that leaves omp where the app looks starts the project")
+    func installStartsTheProject() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let place = root.appendingPathComponent("omp")
+        let (store, _) = try await makeStore(place: place)
+        let fake = try makeFakeOMP(in: try scratch())
+
+        await store.installOMP(command: "cp '\(fake.path)' '\(place.path)' && chmod +x '\(place.path)' && echo installed")
+        #expect(store.installFailure == nil)
+        #expect(!store.ompMissing)
+        #expect(store.installLog.last == "installed")
+        #expect(await store.active?.process?.isRunning() == true)
+        await store.close(store.active!.project.id)
+    }
+
+    @Test("an install that leaves omp somewhere the app does not look says so")
+    func installOutOfSight() async throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (store, _) = try await makeStore(place: root.appendingPathComponent("omp"))
+        await store.installOMP(command: "echo installed elsewhere")
+        #expect(store.ompMissing)
+        #expect(store.installFailure?.contains("Choose omp") == true)
     }
 }
