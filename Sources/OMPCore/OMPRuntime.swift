@@ -57,17 +57,20 @@ public enum ShellEnvironment {
         base: [String: String] = ProcessInfo.processInfo.environment,
         timeout: Duration = .seconds(6)
     ) async -> [String: String] {
-        guard let read = await read(shell: shell, timeout: timeout) else { return base }
+        guard let read = await read(shell: shell, from: base, timeout: timeout) else { return base }
         return base.merging(read) { _, fromShell in fromShell }
     }
 
     /// Runs the shell as Terminal does — login and interactive, so both
     /// profiles are read — and prints its environment between markers, past
     /// anything the profiles print themselves.
-    static func read(shell: String, timeout: Duration) async -> [String: String]? {
+    /// It starts from `base`, the app's own environment, as a Terminal window
+    /// starts from the login session's.
+    static func read(shell: String, from base: [String: String], timeout: Duration) async -> [String: String]? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
         process.arguments = ["-l", "-i", "-c", "printf '%s' \(marker); /usr/bin/env -0; printf '%s' \(marker)"]
+        process.environment = base
         let output = Pipe()
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
