@@ -81,6 +81,38 @@ struct SettingsMenu: View {
                 .disabled(store.active == nil)
                 .help(store.active == nil ? "Open a project first: omp signs in through it" : "See the model providers omp can sign in to")
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Agents")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(palette.ink)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Stop an idle agent after")
+                                .font(.system(size: 12))
+                                .foregroundStyle(palette.inkDim)
+                            Text("Gives its memory back; your next message starts it again, in the same conversation.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(palette.inkFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Picker("", selection: $store.stopIdleAfterMinutes) {
+                            Text("Never").tag(0)
+                            ForEach([5, 10, 15, 30, 60], id: \.self) { minutes in
+                                Text("\(minutes) minutes").tag(minutes)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .controlSize(.small)
+                        .fixedSize()
+                    }
+                    .padding(12)
+                    .glass(radius: 10)
+                    .help("An agent with nothing to do — no turn, no question, nothing queued or running in the background — is stopped after this long")
+                }
+                .padding(.top, 4)
+
                 SkySettingsView(store: store)
                     .padding(.top, 4)
 

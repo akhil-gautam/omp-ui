@@ -39,6 +39,11 @@ private func makeFakeOMP(in directory: URL) throws -> URL {
             data = {"messages": messages}
         elif kind == "prompt":
             data = {"agentInvoked": not local}
+        elif kind == "get_state":
+            # The conversation it has open, written to disk as omp writes one.
+            os.makedirs("/tmp/omp-ui-fake", exist_ok=True)
+            open("/tmp/omp-ui-fake/conversation-b.jsonl", "a").close()
+            data = {"sessionFile": "/tmp/omp-ui-fake/conversation-b.jsonl", "argv": sys.argv[1:]}
         elif kind == "get_available_models":
             data = {"models": ([claude] if "anthropic" in signed_in else []) + ([gateway] if keyed else [])}
         elif kind == "get_login_providers":
@@ -389,6 +394,108 @@ struct EnvironmentTests {
         let session = try #require(store.active)
         #expect(session.modelList.isEmpty)
         #expect(store.providers.first { $0.id == "openrouter" }?.authenticated == false)
+        await store.close(session.project.id)
+    }
+}
+
+@Suite("Idle projects sleep", .serialized)
+@MainActor
+struct IdleTests {
+    private func makeStore() async throws -> (AppStore, ProjectSession, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-idle-\(UUID().uuidString)")
+        let project = root.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let fake = try makeFakeOMP(in: root)
+        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")), locate: { _ in fake.path })
+        store.stopIdleAfterMinutes = 10
+        await store.addProject(path: project.path)
+        let session = try #require(store.active)
+        await store.send("hello")
+        for _ in 0..<50 where session.isWorking { try await Task.sleep(for: .milliseconds(50)) }
+        await store.refresh(session.project.id)
+        return (store, session, root)
+    }
+
+    private let later = Date().addingTimeInterval(11 * 60)
+
+    @Test("a project idle for the time set is put to sleep, keeping what it shows")
+    func idleSleeps() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let shown = session.blocks
+        #expect(!shown.isEmpty)
+
+        await store.stopIdleAgents(at: Date().addingTimeInterval(5 * 60))
+        #expect(session.status == .idle)
+
+        await store.stopIdleAgents(at: later)
+        #expect(session.status == .asleep)
+        #expect(session.process == nil)
+        #expect(session.blocks == shown)
+    }
+
+    @Test("a message wakes a sleeping project, in the conversation it had open")
+    func messageWakes() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.stopIdleAgents(at: later)
+        #expect(session.status == .asleep)
+
+        // Looking at it does not wake it.
+        await store.open(session.project.id)
+        #expect(session.status == .asleep)
+        #expect(session.process == nil)
+
+        await store.send("again")
+        let process = try #require(session.process)
+        #expect(await process.isRunning())
+        let argv = try await process.state()["argv"].array.map(\.string)
+        #expect(argv.suffix(2) == ["--resume", "/tmp/omp-ui-fake/conversation-b.jsonl"])
+        await store.close(session.project.id)
+    }
+
+    @Test("a conversation omp never wrote is not resumed; omp starts afresh")
+    func unwrittenStartsAfresh() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.stopIdleAgents(at: later)
+        // omp writes a conversation only once a reply comes.
+        session.sessionFile = "/nonexistent/omp-ui/never-written.jsonl"
+
+        await store.send("again")
+        let argv = try await #require(session.process).state()["argv"].array.map(\.string)
+        #expect(!argv.contains("--resume"))
+        await store.close(session.project.id)
+    }
+
+    @Test("a project with something going on is left running")
+    func busyStaysAwake() async throws {
+        let (store, session, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        session.pendingRequest = UIRequest(id: "q", method: "confirm", title: "Go ahead?")
+        await store.stopIdleAgents(at: later)
+        #expect(session.process != nil)
+        session.pendingRequest = nil
+
+        session.settled = false
+        await store.stopIdleAgents(at: later)
+        #expect(session.process != nil)
+        session.settled = true
+
+        session.queue = Queue(steering: [], followUp: ["and then"])
+        await store.stopIdleAgents(at: later)
+        #expect(session.process != nil)
+        session.queue = Queue(steering: [], followUp: [])
+
+        session.blocks.append(.tool(id: "t", name: "terminal", args: nil, output: nil, isError: false, running: true))
+        await store.stopIdleAgents(at: later)
+        #expect(session.process != nil)
+        session.blocks.removeLast()
+
+        store.stopIdleAfterMinutes = 0
+        await store.stopIdleAgents(at: later)
+        #expect(session.process != nil)
         await store.close(session.project.id)
     }
 }

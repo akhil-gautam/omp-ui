@@ -91,6 +91,13 @@ has sessions on disk, the most recent one is resumed.
   sending, thinking, running a tool — and for how long.
 - **omp is kept running.** If a project's omp has stopped, the next message
   starts it again; opening a project that is already running leaves it alone.
+- **Idle agents sleep.** A project whose agent has had nothing to do for ten
+  minutes — no turn, no question waiting, nothing queued, no command or
+  background work running — has its omp stopped, giving back its memory
+  (about 250 MB each). The conversation stays on screen, the project reads
+  *asleep*, and your next message starts omp again in the same conversation;
+  looking at the project does not. *Settings → Agents* sets the wait, or
+  turns it off.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt — the request appears and omp waits for your answer.
 - **Twenty themes.** *Settings*, at the foot of the rail, shows each theme as

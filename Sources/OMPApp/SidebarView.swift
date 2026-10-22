@@ -100,7 +100,7 @@ struct SidebarView: View {
                         status: status,
                         isActive: store.activeID == project.id,
                         onOpen: { Task { await store.open(project.id) } },
-                        onStop: status == .stopped ? nil : { Task { await store.close(project.id) } },
+                        onStop: status == .stopped || status == .asleep ? nil : { Task { await store.close(project.id) } },
                         onRemove: { Task { await store.removeProject(project.id) } }
                     )
                 }

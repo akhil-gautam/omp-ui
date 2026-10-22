@@ -5,7 +5,9 @@ import OMPCore
 
 /// What the session is doing.
 public enum SessionStatus: String, Sendable {
-    case starting, idle, busy, stopped, error
+    /// `asleep`: omp was stopped after the project sat idle, and starts again
+    /// on the next message.
+    case starting, idle, busy, stopped, error, asleep
 }
 
 /// A message from omp or one of its extensions.
@@ -70,6 +72,28 @@ public final class ProjectSession {
     public var modelsLoaded = false
     /// omp is up but can use no model: nothing is signed in.
     public var needsSignIn: Bool { modelsLoaded && modelList.isEmpty }
+
+    /// When anything last happened: a message, a command, a frame from omp.
+    @ObservationIgnored public var lastActivity = Date()
+    /// Whether omp has said it has nothing left running in the background —
+    /// no async command, no subagent — that could wake the session.
+    @ObservationIgnored public var settled = true
+    /// The conversation omp has open, so a project woken from sleep resumes
+    /// that one and not merely the newest.
+    @ObservationIgnored public var sessionFile: String?
+
+    /// Whether omp is up with nothing to do — no turn, no question waiting,
+    /// nothing queued, no command running, nothing in the background — and
+    /// has been for at least `limit`.
+    func isIdle(at now: Date, for limit: TimeInterval) -> Bool {
+        guard process != nil, status == .idle, turnStarted == nil, pendingRequest == nil,
+              queue.isEmpty, settled else { return false }
+        let running = blocks.contains { block in
+            if case .tool(_, _, _, _, _, true) = block { return true }
+            return false
+        }
+        return !running && now.timeIntervalSince(lastActivity) >= limit
+    }
 }
 
 /// A sign-in under way: the page omp sent, what it has said since, and why it
@@ -116,6 +140,12 @@ public final class AppStore {
     }
     /// Bumped to send a shower of falling stars at once.
     var skyPreview = 0
+    /// After how many minutes of nothing an idle project's omp is stopped,
+    /// giving its memory back; 0 never. It starts again on the next message.
+    public var stopIdleAfterMinutes: Int = UserDefaults.standard.object(forKey: "omp-ui.stop-idle-minutes") as? Int ?? 10 {
+        didSet { UserDefaults.standard.set(stopIdleAfterMinutes, forKey: "omp-ui.stop-idle-minutes") }
+    }
+    @ObservationIgnored private var idleWatch: Task<Void, Never>?
     /// The colours the interface is drawn with.
     public var palette: Palette { Theme.palette(named: themeName) }
     /// Whether the sidebar is shown.
@@ -197,6 +227,7 @@ public final class AppStore {
         self.activeID = activeID
         await loadEnvironment()
         loadCatalog()
+        watchForIdle()
         isLoading = false
         ompMissing = locate(environment) == nil
         if let activeID, projects.contains(where: { $0.id == activeID }) {
@@ -232,8 +263,11 @@ public final class AppStore {
         let session = sessions[id] ?? ProjectSession(project: project)
         sessions[id] = session
         // A project that is already up is only shown: starting it again would
-        // put a second omp on the same session and drop the first.
+        // put a second omp on the same session and drop the first. One that
+        // was put to sleep for sitting idle is only shown too; the next
+        // message wakes it.
         if let process = session.process, await process.isRunning() { return }
+        if session.status == .asleep { return }
         await start(session)
     }
 
@@ -275,7 +309,14 @@ public final class AppStore {
         do {
             // A project that has been worked on before picks up where it
             // left off.
-            let resume = SessionFiles.sessions(for: project.path).first?.path
+            // A project woken from sleep resumes the conversation it had
+            // open — unless omp never wrote it, which it does only once a
+            // reply comes, and then it starts afresh rather than in another.
+            let resume: String? = if let file = session.sessionFile {
+                FileManager.default.fileExists(atPath: file) ? file : nil
+            } else {
+                SessionFiles.sessions(for: project.path).first?.path
+            }
             try await process.start(resuming: resume)
             if let resume {
                 session.recordedFailures = await Task.detached {
@@ -340,13 +381,44 @@ public final class AppStore {
         }
     }
 
-    /// The project's omp, started again if it has stopped.
+    /// The project's omp, started again if it has stopped — or was put to
+    /// sleep for sitting idle, which a message, a command or an answer ends.
     private func liveProcess(_ session: ProjectSession) async -> AgentProcess? {
+        session.lastActivity = .now
         if let process = session.process, await process.isRunning() { return process }
         await start(session)
         if let process = session.process, await process.isRunning() { return process }
         banner = session.error ?? "omp could not start for \(session.project.name)."
         return nil
+    }
+
+    // MARK: - Idle projects
+
+    /// Looks for idle projects once a minute, for as long as the app runs.
+    private func watchForIdle() {
+        idleWatch?.cancel()
+        idleWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                await self?.stopIdleAgents()
+            }
+        }
+    }
+
+    /// Stops the omp of every project that has sat idle for the time set,
+    /// keeping what it shows; the next message starts omp again, in the same
+    /// conversation.
+    public func stopIdleAgents(at now: Date = .now) async {
+        guard stopIdleAfterMinutes > 0 else { return }
+        let limit = TimeInterval(stopIdleAfterMinutes * 60)
+        for session in sessions.values where session.isIdle(at: now, for: limit) {
+            // A sign-in runs through the open project's omp.
+            if signIn != nil, session.project.id == activeID { continue }
+            let process = session.process
+            session.process = nil
+            session.status = .asleep
+            await process?.stop()
+        }
     }
 
     /// Goes back through the projects that have been open.
@@ -411,6 +483,7 @@ public final class AppStore {
             let state = try await process.state()
             session.model = ModelInfo(json: state["model"])
             session.thinkingLevel = state["thinkingLevel"].optionalString ?? "off"
+            session.sessionFile = state["sessionFile"].optionalString ?? session.sessionFile
             session.contextUsage = ContextUsage(json: state["contextUsage"])
             session.todoPhases = state["todoPhases"].array.compactMap(TodoPhase.init(json:))
             let history = try await process.history()
@@ -430,7 +503,16 @@ public final class AppStore {
                 session.failures += session.unplacedFailures.map { History.Failure(turn: turns, text: $0) }
                 session.unplacedFailures = []
             }
-            session.blocks = History.weave(session.failures, into: history)
+            // What omp has not caught up with yet — a message it has not
+            // echoed, a command still running — stays where it is.
+            let waiting = session.blocks.filter { block in
+                switch block {
+                case .user(let id, _): id.hasPrefix(Transcript.shownPrefix)
+                case .tool(let id, _, _, _, _, true): id.hasPrefix("terminal-")
+                default: false
+                }
+            }
+            session.blocks = History.weave(session.failures, into: history) + waiting
             session.commands = (try? await process.availableCommands()) ?? session.commands
             if let models = try? await process.availableModels() {
                 // Provider by provider, newest first, by models.dev's dates.
@@ -545,8 +627,10 @@ public final class AppStore {
         guard !command.isEmpty else { return }
         let id = "terminal-\(UUID().uuidString)"
         let args: JSONValue = .object(["command": .string(command)])
-        session.blocks.append(.tool(id: id, name: "terminal", args: args, output: nil, isError: false, running: true))
+        // omp first: waking it reads the transcript afresh, which would drop
+        // a card added before.
         guard let process = await liveProcess(session) else { return }
+        session.blocks.append(.tool(id: id, name: "terminal", args: args, output: nil, isError: false, running: true))
         do {
             let result = try await process.bash(command)
             if let index = session.blocks.firstIndex(where: { $0.id == id }) {
@@ -663,10 +747,15 @@ public final class AppStore {
 
     private func apply(_ frame: JSONValue, to id: String) {
         guard let session = sessions[id] else { return }
+        session.lastActivity = .now
         switch frame["type"].string {
         case "agent_start":
             session.status = .busy
+            session.settled = false
             if session.turnStarted == nil { session.turnStarted = .now }
+        case "session_settled":
+            // Nothing left in the background that could wake the session.
+            session.settled = true
         case "agent_end":
             session.status = .idle
             session.turnStarted = nil
@@ -736,7 +825,10 @@ public final class AppStore {
                 banner = message.isEmpty ? "omp could not start the turn." : message
             }
             if !frame["agentInvoked"].bool { settleUnstartedTurn(session) }
+            if case .bool(let settled) = frame["sessionSettled"] { session.settled = settled }
         case "disconnected":
+            // A project put to sleep stays asleep, not stopped.
+            guard session.status != .asleep else { break }
             session.status = .stopped
             session.turnStarted = nil
             session.error = frame["reason"].optionalString

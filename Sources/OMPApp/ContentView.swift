@@ -14,6 +14,7 @@ struct TopBarView: View {
         case .starting: return "STARTING"
         case .error: return "ERROR"
         case .stopped: return "STOPPED"
+        case .asleep: return "ASLEEP"
         }
     }
 

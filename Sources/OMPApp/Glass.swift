@@ -18,6 +18,7 @@ extension Palette {
         case .starting: accent.opacity(0.6)
         case .error: danger
         case .stopped: inkFaint
+        case .asleep: inkFaint.opacity(0.7)
         }
     }
 }

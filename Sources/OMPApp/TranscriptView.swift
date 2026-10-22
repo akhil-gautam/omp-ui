@@ -176,6 +176,7 @@ struct GreetingView: View {
         case .starting: return "Starting omp in \(place)"
         case .error: return "omp could not start in \(place)"
         case .stopped: return "omp is stopped in \(place)"
+        case .asleep: return "omp is asleep in \(place) — it wakes when you write"
         default: return "omp is ready in \(place)"
         }
     }
