@@ -4,7 +4,7 @@ import Testing
 
 @Suite("The highlighter")
 struct HighlighterTests {
-    private let palette = Highlighter.darkPalette
+    private let palette = Theme.palettes[0].code
 
     /// The colour of the run that holds the given text.
     private func colour(of needle: String, in result: AttributedString) -> Color? {

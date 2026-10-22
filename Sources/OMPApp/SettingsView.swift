@@ -126,10 +126,16 @@ struct SettingsMenu: View {
                         .foregroundStyle(palette.inkFaint)
                 }
                 .padding(.top, 4)
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(Theme.palettes, id: \.name) { theme in
-                        ThemeCard(theme: theme, selected: theme.name == store.themeName) {
-                            store.themeName = theme.name
+                ForEach([true, false], id: \.self) { light in
+                    Text(light ? "Light" : "Dark")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(palette.inkFaint)
+                        .padding(.top, light ? 0 : 4)
+                    LazyVGrid(columns: columns, spacing: 14) {
+                        ForEach(Theme.palettes.filter { $0.isLight == light }, id: \.name) { theme in
+                            ThemeCard(theme: theme, selected: theme.name == store.themeName) {
+                                store.themeName = theme.name
+                            }
                         }
                     }
                 }

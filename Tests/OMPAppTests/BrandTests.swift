@@ -96,7 +96,7 @@ struct BrandTests {
     @Test("the mark is drawn in the theme's accent")
     @MainActor
     func theMarkTakesTheAccent() throws {
-        let palette = Theme.palette(named: "Arctic")
+        let palette = Theme.palette(named: "Sky")
         let drawn = try ink(of: BrandMark(width: 46).environment(\.palette, palette))
         let swatch = try ink(of: Rectangle().fill(palette.accent).frame(width: 8, height: 8))
 

@@ -6,10 +6,6 @@ import OMPCore
 // colours, so every theme — light or dark — gets the same look.
 
 extension Palette {
-    /// The colour light is drawn in: white over a dark ground, the accent
-    /// over a light one, where white would not show.
-    var glow: Color { isLight ? accent : .white }
-
     /// The colour of a project's status: ready, working, starting, failed.
     func colour(for status: SessionStatus, working: Bool = false) -> Color {
         switch status {

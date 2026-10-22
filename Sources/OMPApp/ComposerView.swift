@@ -25,7 +25,8 @@ struct ComposerView: View {
                     if !images.isEmpty {
                         attachmentStrip
                     }
-                    TextField("Pitch your idea", text: $draft, axis: .vertical)
+                    TextField("Pitch your idea", text: $draft, prompt: Text(""), axis: .vertical)
+                        .placeholder("Pitch your idea", shown: draft.isEmpty)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14))
                         .foregroundStyle(palette.ink)

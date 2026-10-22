@@ -47,6 +47,8 @@ struct MarkdownView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Links in the text, in the theme's own readable link colour.
+        .tint(palette.link)
     }
 }
 
@@ -90,8 +92,10 @@ struct CodeBlock: View {
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(Highlighter.attributed(text, language: language, palette: Highlighter.darkPalette))
+                Text(Highlighter.attributed(text, language: language, palette: palette.code))
                     .font(Theme.code(12))
+                    // Punctuation and spaces are not highlighted; they take the ink.
+                    .foregroundStyle(palette.code.plain)
                     .textSelection(.enabled)
                     .padding(12)
             }

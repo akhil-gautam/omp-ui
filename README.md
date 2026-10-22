@@ -105,11 +105,17 @@ has sessions on disk, the most recent one is resumed.
   turns it off.
 - **Dialogs.** When omp needs a decision — a tool approval, the `ask` tool, an
   extension prompt — the request appears and omp waits for your answer.
-- **Twenty themes.** *Settings*, at the foot of the rail, shows each theme as
-  a small window in its own colours; choosing one changes the whole
-  interface — a ground, a set of greys and one accent. The choice is
-  remembered. The default is a white page and a grey rail, the way a
-  document is.
+- **Twenty themes.** Ten light and ten dark, each its own design rather than
+  one ground in twenty tints: a white page, newsprint, butter, sage, blush,
+  sky, lilac, clay, mint and concrete; true black, a green phosphor screen,
+  royal cobalt, wine, forest, synthwave, espresso, graphite, a teal lagoon and
+  olive — each with its own rail, ink, accent, links and code colours.
+  Every colour text is set in is checked against every surface it sits on
+  and moved, only as far as it must, until it reads: body text at WCAG AAA
+  (7:1) and every caption, link, error and piece of code at least AA (4.5:1),
+  placeholders included. *Settings*, at the foot of the rail, shows each theme
+  as a small window in its own colours; the choice is remembered. The default
+  is Paper, a white page and a grey rail.
 - **The model list.** The same models omp lists in Terminal, named the way omp
   names them — `provider/id` — so `anthropic/claude-opus-5-5` on an Anthropic
   login and `openrouter/anthropic/claude-opus-5.5` billed to OpenRouter never

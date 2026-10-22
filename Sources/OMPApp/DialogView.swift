@@ -67,9 +67,11 @@ struct DialogView: View {
                 Group {
                     if request.isSecret {
                         // A key is not shown as it is typed or pasted.
-                        SecureField(request.placeholder ?? "Paste it here", text: $text)
+                        SecureField(request.placeholder ?? "Paste it here", text: $text, prompt: Text(""))
+                            .placeholder(request.placeholder ?? "Paste it here", shown: text.isEmpty)
                     } else {
-                        TextField(request.placeholder ?? "Your answer", text: $text, axis: .vertical)
+                        TextField(request.placeholder ?? "Your answer", text: $text, prompt: Text(""), axis: .vertical)
+                            .placeholder(request.placeholder ?? "Your answer", shown: text.isEmpty)
                             .lineLimit(1...8)
                     }
                 }
