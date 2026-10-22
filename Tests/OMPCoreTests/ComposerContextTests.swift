@@ -37,9 +37,15 @@ struct ComposerContextTests {
         git("init", "-q", in: root)
         git("add", "src/app/main.py", ".gitignore", in: root)
         try write("new", to: "notes/todo.md", in: root)
+        // Changed at known times: main.py first, then .gitignore, then the notes.
+        for (offset, path) in ["src/app/main.py", ".gitignore", "notes/todo.md"].enumerated() {
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_700_000_000 + Double(offset) * 60)],
+                                                  ofItemAtPath: root.appendingPathComponent(path).path)
+        }
 
         let listing = ProjectFiles.list(in: root.path)
-        #expect(listing.files == [".gitignore", "notes/todo.md", "src/app/main.py"])
+        // The most recently changed first: what the reader is working on.
+        #expect(listing.files == ["notes/todo.md", ".gitignore", "src/app/main.py"])
         #expect(listing.directories == ["notes", "src", "src/app"])
     }
 
@@ -94,6 +100,7 @@ struct ComposerContextTests {
         #expect(references[1].name == "main")
         #expect(references[1].detail == "current branch")
         #expect(references[2].detail == "Add the first file")
+        #expect(references[2].when?.hasSuffix("ago") == true)
         #expect(references[2].phrase.hasPrefix("commit `"))
     }
 
@@ -154,5 +161,53 @@ struct AskingTests {
         let only = UIRequest(json: .object(["id": .string("2"), "method": .string("open_url"), "url": .string("https://platform.deepseek.com/api_keys")]))
         #expect(both?.launchURL == "http://localhost:1455/launch")
         #expect(only?.launchURL == "https://platform.deepseek.com/api_keys")
+    }
+}
+
+@Suite("Finding things by a few letters")
+struct FuzzyMatchTests {
+    private let paths = ["Sources/OMPApp/ComposerMenu.swift", "docs/menu-notes.md", "Tests/OMPAppTests/SkyTests.swift"]
+
+    @Test("a match at the start of a name beats one inside a word, and the rest are left out")
+    func ranking() {
+        let ranked = FuzzyMatch.rank(paths, query: "menu") { [($0 as NSString).lastPathComponent, $0] }
+        #expect(ranked == ["docs/menu-notes.md", "Sources/OMPApp/ComposerMenu.swift"])
+    }
+
+    @Test("letters are matched in order, with gaps")
+    func inOrder() {
+        #expect(FuzzyMatch.score("cmenu", in: "ComposerMenu.swift") != nil)
+        #expect(FuzzyMatch.score("unem", in: "menu") == nil)
+    }
+
+    @Test("nothing typed keeps the list as it was")
+    func emptyQuery() {
+        #expect(FuzzyMatch.rank(paths, query: "  ") { [$0] } == paths)
+    }
+}
+
+@Suite("Naming a conversation")
+struct ConversationTitleTests {
+    private func file(_ lines: [String]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-title-\(UUID().uuidString).jsonl")
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    @Test("omp's title, else the first thing said, else untitled")
+    func titles() throws {
+        let titled = try file([#"{"type":"title","title":"Fix the upload limit"}"#,
+                               #"{"type":"message","message":{"role":"user","content":"hi"}}"#])
+        let untitled = try file([#"{"type":"session","id":"s"}"#,
+                                 #"{"type":"message","message":{"role":"user","content":[{"type":"text","text":"Why does the 50 MB upload fail?\nIt says too large."}]}}"#])
+        let long = try file([#"{"type":"message","message":{"role":"user","content":"\#(String(repeating: "word ", count: 30))"}}"#])
+        let empty = try file([#"{"type":"session","id":"s"}"#])
+        defer { for url in [titled, untitled, long, empty] { try? FileManager.default.removeItem(at: url) } }
+
+        #expect(SessionFiles.title(from: titled) == "Fix the upload limit")
+        #expect(SessionFiles.title(from: untitled) == "Why does the 50 MB upload fail?")
+        #expect(SessionFiles.title(from: long).count == 80)
+        #expect(SessionFiles.title(from: long).hasSuffix("…"))
+        #expect(SessionFiles.title(from: empty) == "Untitled conversation")
     }
 }

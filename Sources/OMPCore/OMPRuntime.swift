@@ -192,18 +192,36 @@ public enum SessionFiles {
         return found.sorted { $0.modified > $1.modified }
     }
 
-    /// The title omp gave a session, read from its first lines.
+    /// The title omp gave a session, read from its first lines; for one it
+    /// has not titled, the first thing the reader said in it.
     static func title(from file: URL) -> String {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return file.lastPathComponent }
         defer { try? handle.close() }
-        let data = (try? handle.read(upToCount: 16 * 1024)) ?? Data()
+        let data = (try? handle.read(upToCount: 64 * 1024)) ?? Data()
         let text = String(decoding: data, as: UTF8.self)
-        for line in text.split(separator: "\n").prefix(40) {
+        var firstMessage: String?
+        for line in text.split(separator: "\n").prefix(200) {
             guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
             if let name = object["sessionName"] as? String, !name.isEmpty { return name }
             if let title = object["title"] as? String, !title.isEmpty { return title }
+            if firstMessage == nil, let message = object["message"] as? [String: Any], message["role"] as? String == "user" {
+                let said = Self.text(of: message["content"]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !said.isEmpty { firstMessage = said }
+            }
         }
-        return file.deletingPathExtension().lastPathComponent
+        if let firstMessage {
+            let line = firstMessage.split(whereSeparator: \.isNewline).first.map(String.init) ?? firstMessage
+            return line.count > 80 ? String(line.prefix(79)) + "…" : line
+        }
+        return "Untitled conversation"
+    }
+
+    /// The text of a message's content: a string, or the text parts of a
+    /// list.
+    private static func text(of content: Any?) -> String {
+        if let text = content as? String { return text }
+        let parts = content as? [[String: Any]] ?? []
+        return parts.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
     }
 
     /// The directory name omp gives a working directory.

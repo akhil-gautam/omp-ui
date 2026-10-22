@@ -61,15 +61,20 @@ has sessions on disk, the most recent one is resumed.
   steering message omp reads at its next step — the way Enter works in omp's
   own interface — and the queue is listed above the composer.
 - **The + menu.** The button at the start of the composer brings things into
-  a message:
+  a message. Every page is searched by a few letters, best match first, and
+  worked from the keyboard: ↑ and ↓ move, Return chooses, Escape goes back.
   - *Upload file* attaches images; any other file is named so omp reads it.
   - *Files* and *Directories* list the project — git's own list in a
-    repository — and name the one you pick as `@path`, which omp expands into
-    the file's contents or the folder's listing.
-  - *Skills* and *Slash commands* are omp's own, with their descriptions, and
-    start the message.
-  - *Conversations* lists the project's earlier sessions and switches to one.
-  - *Git* points at the uncommitted or staged changes, a branch or a commit.
+    repository, the files changed most recently first, with Finder's icons —
+    and name the one you pick as `@path`, which omp expands into the file's
+    contents or the folder's listing.
+  - *Skills* and *Slash commands* are omp's own, with their descriptions and
+    the arguments a command takes, and start the message.
+  - *Conversations* lists the project's conversations, marks the one that is
+    open, switches to another or starts a new one; one omp has not titled is
+    named by the first thing said in it.
+  - *Git* points at the uncommitted or staged changes, a branch or a commit,
+    each commit by its subject, hash and age.
   - *Rules* lists the rules files omp works under — `.omp/rules`, `AGENTS.md`,
     `CLAUDE.md`, `.cursor/rules` and the rest, in the project and your own.
   - *Terminal* runs a command in the project through omp, which keeps the

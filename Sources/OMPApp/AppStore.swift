@@ -733,11 +733,17 @@ public final class AppStore {
         }
     }
 
-    public func newSession() async {
-        guard let session = active, let process = session.process else { return }
+    /// Starts a new conversation in the open project. What belonged to the
+    /// one being left — its failures, the file omp kept it in — goes with it.
+    public func newConversation() async {
+        guard let session = active, let process = await liveProcess(session) else { return }
         do {
             try await process.newSession()
-            session.blocks.removeAll()
+            session.failures = []
+            session.unplacedFailures = []
+            session.recordedFailures = nil
+            session.sessionFile = nil
+            await refresh(session.project.id)
         } catch {
             banner = error.localizedDescription
         }

@@ -82,8 +82,8 @@ public enum ProjectFiles {
         } else {
             files = walk(root, limit: limit)
         }
-        files = Array(Set(files)).sorted()
-        if files.count > limit { files = Array(files.prefix(limit)) }
+        files = Array(Set(files))
+        if files.count > limit { files = Array(files.sorted().prefix(limit)) }
         var directories: Set<String> = []
         for file in files {
             var parent = (file as NSString).deletingLastPathComponent
@@ -91,7 +91,18 @@ public enum ProjectFiles {
                 parent = (parent as NSString).deletingLastPathComponent
             }
         }
-        return ProjectListing(files: files, directories: directories.sorted())
+        return ProjectListing(files: recentFirst(files, in: root), directories: directories.sorted())
+    }
+
+    /// The files most recently changed first — what the reader is working
+    /// on — and files changed at the same moment by name.
+    static func recentFirst(_ files: [String], in root: String) -> [String] {
+        let base = URL(fileURLWithPath: root)
+        let dated = files.map { file -> (String, Date) in
+            let values = try? base.appendingPathComponent(file).resourceValues(forKeys: [.contentModificationDateKey])
+            return (file, values?.contentModificationDate ?? .distantPast)
+        }
+        return dated.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }.map(\.0)
     }
 
     private static func walk(_ root: String, limit: Int) -> [String] {
@@ -208,11 +219,14 @@ public struct GitReference: Sendable, Equatable, Identifiable {
     public var kind: Kind
     public var name: String
     public var detail: String
+    /// How long ago, for a commit: "2 hours ago".
+    public var when: String?
 
-    public init(kind: Kind, name: String, detail: String) {
+    public init(kind: Kind, name: String, detail: String, when: String? = nil) {
         self.kind = kind
         self.name = name
         self.detail = detail
+        self.when = when
     }
 
     /// How the message names it, in words the agent can act on with git.
@@ -245,12 +259,60 @@ public enum GitReferences {
             let name = String(branch)
             references.append(GitReference(kind: .branch, name: name, detail: name == current ? "current branch" : "branch"))
         }
-        for line in (Shell.run(["git", "-C", path, "log", "-\(commits)", "--format=%h%x09%s"]) ?? "").split(separator: "\n") {
-            let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
-            guard parts.count == 2 else { continue }
-            references.append(GitReference(kind: .commit, name: parts[0], detail: parts[1]))
+        for line in (Shell.run(["git", "-C", path, "log", "-\(commits)", "--format=%h%x09%cr%x09%s"]) ?? "").split(separator: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 2).map(String.init)
+            guard parts.count == 3 else { continue }
+            references.append(GitReference(kind: .commit, name: parts[0], detail: parts[2], when: parts[1]))
         }
         return references
+    }
+}
+
+// MARK: - Finding things by a few letters
+
+/// Matching what is typed against names the way a fuzzy finder does: the
+/// letters must appear in order, and the closer together, the nearer the
+/// start of a word and the earlier they fall, the better the match.
+public enum FuzzyMatch {
+    /// How well `query` matches `text`, higher being better; nil when its
+    /// letters do not all appear in order.
+    public static func score(_ query: String, in text: String) -> Int? {
+        let wanted = Array(query.lowercased().filter { !$0.isWhitespace })
+        guard !wanted.isEmpty else { return 0 }
+        let letters = Array(text.lowercased())
+        var score = 0
+        var next = 0
+        var previous = -2
+        for (index, letter) in letters.enumerated() where next < wanted.count {
+            guard letter == wanted[next] else { continue }
+            var gain = 1
+            if index == previous + 1 { gain += 5 }
+            if index == 0 || "/-_. ".contains(letters[index - 1]) { gain += 8 }
+            score += gain
+            previous = index
+            next += 1
+        }
+        guard next == wanted.count else { return nil }
+        if String(letters).contains(String(wanted)) { score += 20 }
+        return score - letters.count / 12
+    }
+
+    /// The items that match, best first. The first field — a file's name —
+    /// counts for more than the rest, such as the folder it is in.
+    public static func rank<Item>(_ items: [Item], query: String, fields: (Item) -> [String]) -> [Item] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return items }
+        var scored: [(item: Item, score: Int, order: Int)] = []
+        for (order, item) in items.enumerated() {
+            let candidates = fields(item)
+            var best: Int?
+            for (position, field) in candidates.enumerated() {
+                guard let found = score(query, in: field) else { continue }
+                let weighted = position == 0 ? found * 2 : found
+                best = max(best ?? weighted, weighted)
+            }
+            if let best { scored.append((item, best, order)) }
+        }
+        return scored.sorted { $0.score != $1.score ? $0.score > $1.score : $0.order < $1.order }.map(\.item)
     }
 }
 
