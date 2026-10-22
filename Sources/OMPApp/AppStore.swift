@@ -136,6 +136,9 @@ public final class AppStore {
 
     /// What omp can sign in to, as the open project's omp lists it.
     public var providers: [LoginProvider] = []
+    /// models.dev's dates, makers and names, for ordering and drawing the
+    /// model list: the copy kept on disk at once, a fresh one once a day.
+    public var catalog = ModelCatalog()
     /// The sign-in under way, or the one that just failed.
     public var signIn: SignIn?
     /// Whether the reader asked to see the accounts, from Settings.
@@ -187,10 +190,25 @@ public final class AppStore {
         self.projects = projects
         self.activeID = activeID
         await loadEnvironment()
+        loadCatalog()
         isLoading = false
         ompMissing = locate(environment) == nil
         if let activeID, projects.contains(where: { $0.id == activeID }) {
             await open(activeID)
+        }
+    }
+
+    /// Uses the catalog kept on disk, and fetches models.dev's when there is
+    /// none or it is a day old; without the network the list keeps the order
+    /// it can work out from the models' own ids.
+    public func loadCatalog() {
+        let cached = ModelsDev.cached()
+        if let cached { catalog = cached.catalog }
+        guard (cached?.age ?? .infinity) > 24 * 3600 else { return }
+        Task {
+            guard let fresh = try? await ModelsDev.fetch() else { return }
+            catalog = fresh
+            for session in sessions.values { session.modelList = fresh.ordered(session.modelList) }
         }
     }
 
@@ -409,7 +427,8 @@ public final class AppStore {
             session.blocks = History.weave(session.failures, into: history)
             session.commands = (try? await process.availableCommands()) ?? session.commands
             if let models = try? await process.availableModels() {
-                session.modelList = models
+                // Provider by provider, newest first, by models.dev's dates.
+                session.modelList = catalog.ordered(models)
                 session.modelsLoaded = true
             }
             // Which providers are signed in, for the picker's list of the

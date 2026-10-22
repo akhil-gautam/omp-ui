@@ -171,9 +171,21 @@ struct ComposerView: View {
             icon: "bolt",
             // As omp lists them: every model is its selector, `provider/id`,
             // and the chip names the provider so a subscription model and the
-            // same model through a gateway never look alike.
+            // same model through a gateway never look alike. The store keeps
+            // the list provider by provider, newest first; each row has its
+            // maker's logo and the month it came out.
             items: (session?.modelList ?? []).map { model in
-                Select.Item(id: model.selector, title: model.name, detail: model.selector, badge: model.provider)
+                let released = store.catalog.releaseDate(of: model).flatMap(Self.month)
+                return Select.Item(
+                    id: model.selector, title: model.name,
+                    detail: [model.selector, released].compactMap { $0 }.joined(separator: " · "),
+                    badge: model.provider,
+                    logo: store.catalog.maker(of: model),
+                    group: model.provider,
+                    groupTitle: store.catalog.name(ofProvider: model.provider)
+                        ?? store.providers.first { $0.id == model.provider }?.name
+                        ?? model.provider
+                )
             },
             selected: session?.model?.selector,
             placeholder: "No model",
@@ -182,7 +194,7 @@ struct ComposerView: View {
             // Like omp's model hub, the providers not signed in yet are
             // listed too, and signing in is how their models are enabled.
             more: store.providers.filter { !$0.authenticated }.map { provider in
-                Select.Item(id: Self.signInPrefix + provider.id, title: provider.name, detail: "Not signed in · \(provider.id)")
+                Select.Item(id: Self.signInPrefix + provider.id, title: provider.name, detail: "Not signed in · \(provider.id)", logo: provider.id)
             },
             moreTitle: "Not signed in",
             moreAction: "Sign in"
@@ -197,6 +209,21 @@ struct ComposerView: View {
             }
         }
     }
+
+    /// A release date, `yyyy-mm-dd`, as the month it fell in: "Feb 2026".
+    static func month(_ date: String) -> String? {
+        let parts = date.split(separator: "-")
+        guard parts.count >= 2, let month = Int(parts[1]), (1...12).contains(month) else { return nil }
+        return "\(Self.months[month - 1]) \(parts[0])"
+    }
+
+    /// Month names in the reader's language: "Feb", not the "M02" a calendar
+    /// without a locale gives.
+    private static let months: [String] = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        return formatter.shortMonthSymbols
+    }()
 
     /// Marks a picker row that signs in to a provider rather than choosing a
     /// model.

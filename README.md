@@ -101,7 +101,11 @@ has sessions on disk, the most recent one is resumed.
 - **The model list.** The same models omp lists in Terminal, named the way omp
   names them — `provider/id` — so `anthropic/claude-opus-5-5` on an Anthropic
   login and `openrouter/anthropic/claude-opus-5.5` billed to OpenRouter never
-  look alike. The chip names the provider beside the model, and the list is
+  look alike. Provider by provider, each under its logo, newest first by
+  [models.dev](https://models.dev)'s release dates, with each model's maker's
+  logo and the month it came out; models.dev's catalog is fetched at most once
+  a day and kept, and without it the order falls back to the dates in the
+  models' ids. The chip names the provider beside the model, and the list is
   searchable by name, provider or id. Below the models, as in omp's model hub,
   are the providers not signed in yet, each with *Sign in*: signing in is how
   their models are enabled.

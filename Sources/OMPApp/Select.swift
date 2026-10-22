@@ -14,12 +14,22 @@ struct Select: View {
         /// Said beside the title on the chip, when the title alone could name
         /// two different things.
         var badge: String?
+        /// The provider whose logo the row shows, from models.dev.
+        var logo: String?
+        /// The group the row belongs to, by key, and its heading: rows of
+        /// one group come together and are introduced by it.
+        var group: String?
+        var groupTitle: String?
 
-        init(id: String, title: String, detail: String? = nil, badge: String? = nil) {
+        init(id: String, title: String, detail: String? = nil, badge: String? = nil,
+             logo: String? = nil, group: String? = nil, groupTitle: String? = nil) {
             self.id = id
             self.title = title
             self.detail = detail
             self.badge = badge
+            self.logo = logo
+            self.group = group
+            self.groupTitle = groupTitle
         }
 
         /// What the row says when the pointer rests on it.
@@ -140,7 +150,11 @@ struct Select: View {
                 // The list can hold hundreds of models, so the rows are made
                 // as they are scrolled to rather than all at once.
                 LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(filtered) { item in
+                    let counts = Dictionary(grouping: filtered, by: { $0.group ?? "" }).mapValues(\.count)
+                    ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
+                        if let group = item.group, index == 0 || filtered[index - 1].group != group {
+                            groupHeading(item, count: counts[group] ?? 0, first: index == 0)
+                        }
                         row(item, action: nil)
                     }
                     let others = narrowed(more)
@@ -182,6 +196,9 @@ struct Select: View {
             open = false
         } label: {
             HStack(spacing: 10) {
+                if let logo = item.logo {
+                    ProviderLogo(provider: logo, size: 15)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
                         .font(Theme.body(12.5))
@@ -220,6 +237,28 @@ struct Select: View {
         .buttonStyle(.plain)
         .focusable(false)
         .help(item.tip)
+    }
+
+    /// The heading of a group: the provider's logo, its name, and how many
+    /// of its rows are listed.
+    private func groupHeading(_ item: Item, count: Int, first: Bool) -> some View {
+        HStack(spacing: 7) {
+            if let group = item.group {
+                ProviderLogo(provider: group, size: 12)
+            }
+            Text((item.groupTitle ?? item.group ?? "").uppercased())
+                .font(Theme.label(9.5))
+                .tracking(0.4)
+                .foregroundStyle(palette.inkFaint)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Text("\(count)")
+                .font(Theme.label(9.5))
+                .foregroundStyle(palette.inkFaint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, first ? 4 : 14)
+        .padding(.bottom, 4)
     }
 }
 
