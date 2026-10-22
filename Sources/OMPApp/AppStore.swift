@@ -110,6 +110,12 @@ public final class AppStore {
     public var themeName: String = UserDefaults.standard.string(forKey: "omp-ui.theme") ?? "Paper" {
         didSet { UserDefaults.standard.set(themeName, forKey: "omp-ui.theme") }
     }
+    /// How the sky looks while agents work, and how often stars fall.
+    var sky = SkySettings.load() {
+        didSet { sky.save() }
+    }
+    /// Bumped to send a shower of falling stars at once.
+    var skyPreview = 0
     /// The colours the interface is drawn with.
     public var palette: Palette { Theme.palette(named: themeName) }
     /// Whether the sidebar is shown.

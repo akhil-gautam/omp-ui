@@ -87,13 +87,14 @@ struct ContentView: View {
             // The lamp over the page: bright over an empty one, faint
             // behind a conversation so it never competes with the words.
             .background(alignment: .top) {
-                ZStack(alignment: .top) {
-                    Spotlight(strength: store.active?.blocks.isEmpty ?? true ? 1 : 0.35)
-                        .animation(.easeOut(duration: 0.6), value: store.active?.blocks.isEmpty ?? true)
-                    // Now and then a star falls while the agent works.
-                    MeteorShower(active: store.active?.isWorking ?? false)
-                }
+                Spotlight(strength: store.active?.blocks.isEmpty ?? true ? 1 : 0.35)
+                    .animation(.easeOut(duration: 0.6), value: store.active?.blocks.isEmpty ?? true)
             }
+        }
+        // The sky over everything in the window — page, cards and code alike —
+        // never in the way of a click.
+        .overlay {
+            SkyView(settings: store.sky, working: store.active?.isWorking ?? false, preview: store.skyPreview)
         }
         .environment(\.palette, store.palette)
         .background(store.palette.ground)

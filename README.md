@@ -137,9 +137,14 @@ has sessions on disk, the most recent one is resumed.
   a headline sits in its light with a few ways to begin and the name set
   enormous beneath them, and faint behind a conversation. Every surface is
   glass lit along its top edge, and labels sit in pills — in all twenty
-  themes, drawn from each theme's own colours. While an agent works, now and
-  then a star falls across the sky over the page — one every twenty to thirty
-  seconds, none with Reduce Motion on.
+  themes, drawn from each theme's own colours.
+- **The sky.** While an agent works, stars hang over the whole window and
+  twinkle, and every so often a shower of falling stars crosses it, over the
+  page, the cards and the code alike. *Settings → Sky* sets when it shows —
+  while working, always or never — how often showers come, how many stars
+  fall in each, their speed, tail, thickness, brightness, direction and
+  colour, and how many stars hang in the sky; *Preview* sends a shower at
+  once. With Reduce Motion on there is no sky.
 - **The top bar.** The project and its agent's status in a pill at the
   centre, with back and forward beside it.
 - **The conversation.** What you said is a bubble on the right. The agent's

@@ -39,7 +39,8 @@ struct SettingsButton: View {
     }
 }
 
-/// The settings: the model accounts, and the theme, each shown as it looks.
+/// The settings: the model accounts, the sky, and the theme, each shown as it
+/// looks.
 struct SettingsMenu: View {
     @Environment(\.palette) private var palette
     @Bindable var store: AppStore
@@ -48,48 +49,51 @@ struct SettingsMenu: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                store.showingAccounts = true
-                onClose()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "person.badge.key")
-                        .font(.system(size: 13))
-                        .foregroundStyle(palette.inkDim)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Accounts")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(palette.ink)
-                        Text("Sign in to model providers, or out of them")
-                            .font(.system(size: 11.5))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    store.showingAccounts = true
+                    onClose()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.badge.key")
+                            .font(.system(size: 13))
+                            .foregroundStyle(palette.inkDim)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Accounts")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(palette.ink)
+                            Text("Sign in to model providers, or out of them")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(palette.inkFaint)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(palette.inkFaint)
                     }
+                    .padding(10)
+                    .glass(radius: 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .disabled(store.active == nil)
+                .help(store.active == nil ? "Open a project first: omp signs in through it" : "See the model providers omp can sign in to")
+
+                SkySettingsView(store: store)
+                    .padding(.top, 4)
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Theme")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(palette.ink)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                    Text(store.themeName)
+                        .font(.system(size: 12))
                         .foregroundStyle(palette.inkFaint)
                 }
-                .padding(10)
-                .glass(radius: 10)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .disabled(store.active == nil)
-            .help(store.active == nil ? "Open a project first: omp signs in through it" : "See the model providers omp can sign in to")
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Theme")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                Spacer(minLength: 0)
-                Text(store.themeName)
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.inkFaint)
-            }
-            .padding(.top, 4)
-            ScrollView {
+                .padding(.top, 4)
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(Theme.palettes, id: \.name) { theme in
                         ThemeCard(theme: theme, selected: theme.name == store.themeName) {
@@ -99,10 +103,12 @@ struct SettingsMenu: View {
                 }
                 .padding(2)
             }
-            .frame(height: 390)
+            .padding(16)
         }
-        .padding(16)
-        .frame(width: 500)
+        .frame(width: 500, height: 640)
+        // Sliders, switches and menus drawn light or dark with the theme,
+        // not with the system.
+        .environment(\.colorScheme, palette.isLight ? .light : .dark)
         .background(palette.panel)
         .background(PopoverBackground(colour: palette.panel))
     }
