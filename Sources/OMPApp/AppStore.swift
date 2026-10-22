@@ -66,6 +66,21 @@ public final class ProjectSession {
     /// Whether a turn is under way, including the wait before omp starts it.
     public var isWorking: Bool { isBusy || turnStarted != nil }
     public var hasTodos: Bool { todoPhases.contains { !$0.tasks.isEmpty } }
+    /// Whether omp has said which models it can use, at least once.
+    public var modelsLoaded = false
+    /// omp is up but can use no model: nothing is signed in.
+    public var needsSignIn: Bool { modelsLoaded && modelList.isEmpty }
+}
+
+/// A sign-in under way: the page omp sent, what it has said since, and why it
+/// stopped, if it did.
+public struct SignIn: Equatable {
+    public let token = UUID()
+    public var provider: LoginProvider
+    public var url: String?
+    public var instructions: String?
+    public var progress: String?
+    public var failure: String?
 }
 
 /// The app's root store: the projects, their sessions, and what the reader
@@ -101,9 +116,14 @@ public final class AppStore {
     public var sidebarOpen = true
 
     @ObservationIgnored private let store: ProjectStore
-    /// Finds omp. Asked at every start, so omp installed while the app is
-    /// open is found without a relaunch.
-    @ObservationIgnored private let locate: () -> String?
+    /// Finds omp in an environment. Asked at every start, so omp installed
+    /// while the app is open is found without a relaunch.
+    @ObservationIgnored private let locate: ([String: String]) -> String?
+    /// Reads the environment omp should start with.
+    @ObservationIgnored private let readEnvironment: () async -> [String: String]
+    /// The environment omp starts with: the reader's login shell's, read at
+    /// launch, so omp sees the same keys and PATH it sees in Terminal.
+    @ObservationIgnored public private(set) var environment = ProcessInfo.processInfo.environment
 
     /// Whether omp was missing the last time it was looked for; the window
     /// then shows how to install it instead of a conversation.
@@ -114,9 +134,30 @@ public final class AppStore {
     /// Why the last install did not leave a usable omp behind.
     public var installFailure: String?
 
-    public init(store: ProjectStore = ProjectStore(), locate: @escaping () -> String? = { OMPBinary.resolve() }) {
+    /// What omp can sign in to, as the open project's omp lists it.
+    public var providers: [LoginProvider] = []
+    /// The sign-in under way, or the one that just failed.
+    public var signIn: SignIn?
+    /// Whether the reader asked to see the accounts, from Settings.
+    public var showingAccounts = false
+    /// Opens a page in the browser.
+    @ObservationIgnored private let openURL: (URL) -> Void
+
+    public init(
+        store: ProjectStore = ProjectStore(),
+        locate: @escaping ([String: String]) -> String? = { OMPBinary.resolve(environment: $0) },
+        readEnvironment: @escaping () async -> [String: String] = { await ShellEnvironment.load() },
+        openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
+    ) {
         self.store = store
         self.locate = locate
+        self.readEnvironment = readEnvironment
+        self.openURL = openURL
+    }
+
+    /// Reads the reader's shell environment, for every omp started after.
+    public func loadEnvironment() async {
+        environment = await readEnvironment()
     }
 
     public var active: ProjectSession? {
@@ -145,8 +186,9 @@ public final class AppStore {
         let (projects, activeID) = store.load()
         self.projects = projects
         self.activeID = activeID
+        await loadEnvironment()
         isLoading = false
-        ompMissing = locate() == nil
+        ompMissing = locate(environment) == nil
         if let activeID, projects.contains(where: { $0.id == activeID }) {
             await open(activeID)
         }
@@ -192,7 +234,7 @@ public final class AppStore {
             await stale.stop()
         }
 
-        guard let executable = locate() else {
+        guard let executable = locate(environment) else {
             // Not a failure of the project: the setup screen takes over.
             session.status = .stopped
             ompMissing = true
@@ -201,7 +243,7 @@ public final class AppStore {
         ompMissing = false
 
         let id = project.id
-        let process = AgentProcess(project: project, executable: executable) { [weak self] frame in
+        let process = AgentProcess(project: project, executable: executable, environment: environment) { [weak self] frame in
             await MainActor.run { self?.apply(frame, to: id) }
         }
         session.process = process
@@ -234,7 +276,7 @@ public final class AppStore {
     /// Looks for omp again — after it was installed, or pointed at — and
     /// starts the open project with it.
     public func checkForOMP() async {
-        ompMissing = locate() == nil
+        ompMissing = locate(environment) == nil
         guard !ompMissing else { return }
         installFailure = nil
         if let activeID { await open(activeID) }
@@ -260,7 +302,7 @@ public final class AppStore {
         installing = true
         installFailure = nil
         installLog = ["$ \(command)"]
-        let status = await OMPInstaller.run(command) { line in
+        let status = await OMPInstaller.run(command, environment: environment) { line in
             await MainActor.run { self.installLog.append(line) }
         }
         installing = false
@@ -366,7 +408,15 @@ public final class AppStore {
             }
             session.blocks = History.weave(session.failures, into: history)
             session.commands = (try? await process.availableCommands()) ?? session.commands
-            session.modelList = (try? await process.availableModels()) ?? session.modelList
+            if let models = try? await process.availableModels() {
+                session.modelList = models
+                session.modelsLoaded = true
+            }
+            // Which providers are signed in, for the picker's list of the
+            // ones that are not.
+            if let providers = try? await process.loginProviders() {
+                self.providers = LoginProvider.ordered(providers)
+            }
         } catch {
             session.error = error.localizedDescription
         }
@@ -374,6 +424,68 @@ public final class AppStore {
 
     private func project(_ id: String) -> Project? {
         projects.first { $0.id == id }
+    }
+
+    // MARK: - Signing in
+
+    /// Reads which providers omp can sign in to, through the open project.
+    public func loadProviders() async {
+        guard let session = active, let process = await liveProcess(session) else { return }
+        if let providers = try? await process.loginProviders() {
+            self.providers = LoginProvider.ordered(providers)
+        }
+    }
+
+    /// Signs in to a provider through omp. omp sends the page to finish on,
+    /// which opens in the browser; once omp confirms, every open project
+    /// reads its models again, and one that has no model is given one.
+    public func signIn(to provider: LoginProvider) async {
+        guard signIn == nil || signIn?.failure != nil else { return }
+        guard let session = active, let process = await liveProcess(session) else { return }
+        let flow = SignIn(provider: provider)
+        signIn = flow
+        do {
+            try await process.login(provider: provider.id)
+            // A sign-in the reader walked away from is not reported.
+            guard signIn?.token == flow.token else { return }
+            signIn = nil
+            await loadProviders()
+            for (id, other) in sessions where other.process != nil {
+                await refresh(id)
+            }
+            if session.model == nil, let model = session.modelList.first(where: { $0.provider == provider.id }) ?? session.modelList.first {
+                await setModel(model)
+            }
+        } catch {
+            guard signIn?.token == flow.token else { return }
+            signIn?.failure = LoginProvider.explain(error.localizedDescription, provider: provider.name)
+        }
+    }
+
+    /// Stops waiting on a sign-in; omp gives up on its own in time.
+    public func dismissSignIn() {
+        signIn = nil
+    }
+
+    /// Opens the sign-in page again.
+    public func reopenSignInPage() {
+        if let address = signIn?.url, let url = URL(string: address) { openURL(url) }
+    }
+
+    /// Removes every saved sign-in for a provider.
+    public func signOut(of provider: LoginProvider) async {
+        guard let session = active, let process = await liveProcess(session) else { return }
+        do {
+            for account in try await process.loginAccounts(provider: provider.id) {
+                try await process.logout(provider: provider.id, account: account.credentialID)
+            }
+            await loadProviders()
+            for (id, other) in sessions where other.process != nil {
+                await refresh(id)
+            }
+        } catch {
+            banner = error.localizedDescription
+        }
     }
 
     // MARK: - Talking to omp
@@ -575,6 +687,15 @@ public final class AppStore {
             let method = frame["method"].string
             if method == "cancel" {
                 if session.pendingRequest?.id == frame["targetId"].string { session.pendingRequest = nil }
+            } else if method == "notify" {
+                // During a sign-in, omp's notes say how it is going.
+                if signIn != nil { signIn?.progress = frame["message"].string }
+            } else if method == "open_url", signIn != nil, let request = UIRequest(json: frame) {
+                // The page a sign-in finishes on opens in the browser rather
+                // than waiting in a dialog; omp does not wait on it.
+                signIn?.url = request.launchURL
+                signIn?.instructions = request.instructions
+                if let address = request.launchURL, let url = URL(string: address) { openURL(url) }
             } else if let request = UIRequest(json: frame) {
                 session.pendingRequest = request
             }

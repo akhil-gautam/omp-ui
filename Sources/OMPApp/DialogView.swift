@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import OMPCore
 
@@ -63,29 +64,46 @@ struct DialogView: View {
                     }
                 }
             } else if request.method == "input" || request.method == "editor" {
-                TextField(request.placeholder ?? "Your answer", text: $text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(Theme.body(13))
-                    .foregroundStyle(palette.ink)
-                    .lineLimit(1...8)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(palette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(palette.hairline, lineWidth: 1)
+                Group {
+                    if request.isSecret {
+                        // A key is not shown as it is typed or pasted.
+                        SecureField(request.placeholder ?? "Paste it here", text: $text)
+                    } else {
+                        TextField(request.placeholder ?? "Your answer", text: $text, axis: .vertical)
+                            .lineLimit(1...8)
                     }
-                    .help("Your answer goes back to omp")
+                }
+                .textFieldStyle(.plain)
+                .font(Theme.body(13))
+                .foregroundStyle(palette.ink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(palette.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(palette.hairline, lineWidth: 1)
+                }
+                .onSubmit { Task { await store.answer(request, value: text) } }
+                .help(request.isSecret ? "Kept hidden; it goes to omp, which stores it" : "Your answer goes back to omp")
                 ConfirmButton(title: "Send", tone: palette.accent, help: "Send your answer to omp") {
                     Task { await store.answer(request, value: text) }
                 }
-            } else if request.method == "open_url", let url = request.launchURL {
-                Text(url)
+            } else if request.method == "open_url", let address = request.launchURL {
+                if let instructions = request.instructions {
+                    Text(instructions)
+                        .font(Theme.body(13))
+                        .foregroundStyle(palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(address)
                     .font(Theme.code(12))
                     .foregroundStyle(palette.inkDim)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
                     .textSelection(.enabled)
-                ConfirmButton(title: "Dismiss", tone: palette.inkDim, help: "Close the request without opening it") {
-                    Task { await store.answer(request, value: "", cancelled: true) }
+                ConfirmButton(title: "Open", tone: palette.accent, help: "Open the page in your browser") {
+                    if let url = URL(string: address) { NSWorkspace.shared.open(url) }
+                    store.active?.pendingRequest = nil
                 }
             }
 

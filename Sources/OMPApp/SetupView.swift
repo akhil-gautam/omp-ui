@@ -43,7 +43,7 @@ struct SetupView: View {
                 otherWays
                     .padding(.top, 10)
 
-                Text("Then sign in to a model provider: run omp in Terminal once and type /login.")
+                Text("Next, you sign in to a model provider, right here.")
                     .font(.system(size: 12))
                     .foregroundStyle(palette.inkFaint)
                     .padding(.top, 4)

@@ -20,8 +20,10 @@ public enum OMPBinary {
 
     /// The absolute path of the omp executable: the environment's override,
     /// then the one the reader chose, then the PATH, then the usual places.
-    public static func resolve(chosen: String? = UserDefaults.standard.string(forKey: chosenKey)) -> String? {
-        let environment = ProcessInfo.processInfo.environment
+    public static func resolve(
+        chosen: String? = UserDefaults.standard.string(forKey: chosenKey),
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
         if let raw = environment[overrideVariable], !raw.isEmpty {
             return FileManager.default.fileExists(atPath: raw) ? raw : nil
         }
@@ -38,6 +40,72 @@ public enum OMPBinary {
     }
 }
 
+/// The environment a Terminal window has.
+///
+/// An app opened from the Dock gets launchd's bare environment, without what
+/// the reader's shell profile exports — API keys such as `OPENROUTER_API_KEY`,
+/// and PATH additions — so an omp started with it can use fewer providers
+/// than the omp the reader runs in Terminal. The login shell is asked for its
+/// environment instead, as editors do.
+public enum ShellEnvironment {
+    static let marker = "__OMP_UI_ENVIRONMENT__"
+
+    /// The login shell's environment over the app's own, or the app's own
+    /// when the shell does not answer in time.
+    public static func load(
+        shell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh",
+        base: [String: String] = ProcessInfo.processInfo.environment,
+        timeout: Duration = .seconds(6)
+    ) async -> [String: String] {
+        guard let read = await read(shell: shell, timeout: timeout) else { return base }
+        return base.merging(read) { _, fromShell in fromShell }
+    }
+
+    /// Runs the shell as Terminal does — login and interactive, so both
+    /// profiles are read — and prints its environment between markers, past
+    /// anything the profiles print themselves.
+    static func read(shell: String, timeout: Duration) async -> [String: String]? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-l", "-i", "-c", "printf '%s' \(marker); /usr/bin/env -0; printf '%s' \(marker)"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let reading = Task.detached { output.fileHandleForReading.readDataToEndOfFile() }
+        let deadline = ContinuousClock.now + timeout
+        while process.isRunning, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        if process.isRunning {
+            process.terminate()
+            return nil
+        }
+        return parse(await reading.value)
+    }
+
+    /// The variables between the markers: `NAME=value` pairs separated by
+    /// NUL, so a value may hold newlines and `=`.
+    static func parse(_ data: Data) -> [String: String]? {
+        let text = String(decoding: data, as: UTF8.self)
+        let parts = text.components(separatedBy: marker)
+        guard parts.count >= 3 else { return nil }
+        var environment: [String: String] = [:]
+        for entry in parts[1].split(separator: "\0") {
+            guard let equals = entry.firstIndex(of: "="), equals != entry.startIndex else { continue }
+            environment[String(entry[..<equals])] = String(entry[entry.index(after: equals)...])
+        }
+        // What describes the shell itself, not the reader's settings.
+        for name in ["PWD", "OLDPWD", "SHLVL", "_"] { environment[name] = nil }
+        return environment.isEmpty ? nil : environment
+    }
+}
+
 /// Installing omp the ways its own README gives for a Mac.
 public enum OMPInstaller {
     /// The official installer: Bun when it is there, the prebuilt binary,
@@ -47,13 +115,17 @@ public enum OMPInstaller {
     public static let bun = "bun install -g @oh-my-pi/pi-coding-agent"
 
     /// Runs a shell command, handing over each line it prints as it prints
-    /// it, and returns its exit status. An app opened from the Dock has a
-    /// bare PATH, so the places Bun and Homebrew live are put on it.
-    public static func run(_ command: String = command, onLine: @Sendable (String) async -> Void) async -> Int32 {
+    /// it, and returns its exit status. The places Bun and Homebrew live are
+    /// put on the PATH, in case the environment given lacks them.
+    public static func run(
+        _ command: String = command,
+        environment base: [String: String] = ProcessInfo.processInfo.environment,
+        onLine: @Sendable (String) async -> Void
+    ) async -> Int32 {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", command]
-        var environment = ProcessInfo.processInfo.environment
+        var environment = base
         let home = NSHomeDirectory()
         environment["PATH"] = ["\(home)/.bun/bin", "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
                                environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"].joined(separator: ":")

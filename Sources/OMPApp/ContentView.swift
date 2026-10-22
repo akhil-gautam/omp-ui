@@ -111,15 +111,27 @@ struct ContentView: View {
 }
 
 /// The column that holds the transcript and the composer — or, on a Mac
-/// without omp, the way to install it.
+/// without omp, the way to install it, and with nothing signed in, the way
+/// to sign in.
 struct MainColumn: View {
     @Bindable var store: AppStore
 
+    private enum Page { case setup, signIn, conversation }
+
+    private var page: Page {
+        if store.ompMissing { return .setup }
+        if store.showingAccounts || store.signIn != nil || store.active?.needsSignIn == true { return .signIn }
+        return .conversation
+    }
+
     var body: some View {
         Group {
-            if store.ompMissing {
+            switch page {
+            case .setup:
                 SetupView(store: store)
-            } else {
+            case .signIn:
+                SignInView(store: store)
+            case .conversation:
                 VStack(spacing: 0) {
                     TranscriptView(store: store)
                     ComposerView(store: store)
@@ -127,9 +139,9 @@ struct MainColumn: View {
             }
         }
         // The name, enormous and fading as it falls, in the empty band
-        // between the page and the composer.
+        // between an empty page and the composer.
         .background(alignment: .bottom) {
-            if !store.ompMissing, store.active?.blocks.isEmpty ?? true {
+            if page == .conversation, store.active?.blocks.isEmpty ?? true {
                 Wordmark()
                     .offset(y: -96)
                     .transition(.opacity)

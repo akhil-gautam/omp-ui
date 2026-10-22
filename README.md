@@ -24,8 +24,8 @@ JSON over stdio — and streams everything they produce into the window.
   button, or shows the Homebrew and Bun commands. It finds omp where omp's
   installer, Homebrew and Bun put it; *Choose omp…* points it at one anywhere
   else, and `OMP_UI_OMP_BIN` overrides both.
-- Model credentials for omp (`omp models` should list at least one): run `omp`
-  once in Terminal and sign in with `/login`.
+- A model account for omp. If omp has none, the app asks you to sign in to
+  one — in the browser, or by pasting a key — with omp's own sign-in.
 
 ## Running it
 
@@ -98,11 +98,23 @@ has sessions on disk, the most recent one is resumed.
   interface — a ground, a set of greys and one accent. The choice is
   remembered. The default is a white page and a grey rail, the way a
   document is.
-- **The model list.** Every model omp offers, named the way omp names it —
-  `provider/id` — so `anthropic/claude-opus-5-5` on an Anthropic login and
-  `openrouter/anthropic/claude-opus-5.5` billed to OpenRouter never look
-  alike. The chip names the provider beside the model, and the list is
-  searchable by name, provider or id.
+- **The model list.** The same models omp lists in Terminal, named the way omp
+  names them — `provider/id` — so `anthropic/claude-opus-5-5` on an Anthropic
+  login and `openrouter/anthropic/claude-opus-5.5` billed to OpenRouter never
+  look alike. The chip names the provider beside the model, and the list is
+  searchable by name, provider or id. Below the models, as in omp's model hub,
+  are the providers not signed in yet, each with *Sign in*: signing in is how
+  their models are enabled.
+- **Your shell's environment.** An app opened from the Dock does not see what
+  your shell profile exports, so omp would miss API keys like
+  `OPENROUTER_API_KEY` and PATH additions. The app reads your login shell's
+  environment at launch and starts omp with it, so omp sees what it sees in
+  Terminal.
+- **Accounts.** omp's own sign-in, in the window: when omp can use no model
+  the app asks you to sign in, and *Settings → Accounts* adds an account or
+  signs out of one. Browser sign-ins open the provider's page and finish on
+  their own; a provider that wants a key opens the page where you get one and
+  takes it in a hidden field.
 - **A window that runs to its edges.** The content begins at the top of the
   window with the traffic lights drawn over it, the way a browser's does.
 - **Live state.** The plan omp is working through, and the project's status

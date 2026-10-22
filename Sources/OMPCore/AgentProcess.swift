@@ -9,12 +9,21 @@ public actor AgentProcess {
 
     private let project: Project
     private let executable: String
+    /// The environment omp starts with: the reader's shell's, so it sees the
+    /// keys and PATH it sees in Terminal.
+    private let environment: [String: String]
     private let onFrame: FrameHandler
     private var connection: RPCConnection?
 
-    public init(project: Project, executable: String, onFrame: @escaping FrameHandler) {
+    public init(
+        project: Project,
+        executable: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        onFrame: @escaping FrameHandler
+    ) {
         self.project = project
         self.executable = executable
+        self.environment = environment
         self.onFrame = onFrame
     }
 
@@ -29,7 +38,7 @@ public actor AgentProcess {
         var arguments = ["--mode", "rpc-ui", "--no-title"]
         if let session { arguments += ["--resume", session] }
         // omp's own tools have to be findable, and they sit next to omp.
-        var environment = ProcessInfo.processInfo.environment
+        var environment = self.environment
         let directory = (executable as NSString).deletingLastPathComponent
         let path = environment["PATH"] ?? ""
         environment["PATH"] = directory.isEmpty ? path : "\(directory):\(path)"
@@ -110,7 +119,8 @@ public actor AgentProcess {
     }
 
     public func availableModels() async throws -> [ModelInfo] {
-        let response = try await call("get_available_models")
+        // omp may first finish asking providers for their models.
+        let response = try await call("get_available_models", timeout: .seconds(180))
         let entries = response["models"].array.isEmpty ? response.array : response["models"].array
         return entries.compactMap(ModelInfo.init(json:))
     }
@@ -141,6 +151,26 @@ public actor AgentProcess {
         return !reply["cancelled"].bool
     }
 
+    /// The providers omp can sign in to, and which it is signed in to.
+    public func loginProviders() async throws -> [LoginProvider] {
+        try await call("get_login_providers")["providers"].array.compactMap(LoginProvider.init(json:))
+    }
+
+    /// Signs in to a provider. omp sends the page to open as it goes, and
+    /// answers only once the reader has finished there, so the wait is long.
+    public func login(provider: String) async throws {
+        _ = try await call("login", ["providerId": .string(provider)], timeout: .seconds(900))
+    }
+
+    /// The saved sign-ins for a provider.
+    public func loginAccounts(provider: String) async throws -> [LoginAccount] {
+        try await call("get_logout_accounts", ["providerId": .string(provider)])["accounts"].array.compactMap(LoginAccount.init(json:))
+    }
+
+    /// Removes a saved sign-in.
+    public func logout(provider: String, account: Int) async throws {
+        _ = try await call("logout", ["providerId": .string(provider), "credentialId": .number(Double(account))])
+    }
 
     public func newSession() async throws {
         _ = try await call("new_session")

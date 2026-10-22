@@ -137,3 +137,22 @@ struct ComposerContextTests {
         ])
     }
 }
+
+@Suite("What omp asks for")
+struct AskingTests {
+    @Test("a key, a token or a password is asked for in a hidden field; a sign-in code is not")
+    func secretsAreHidden() {
+        let key = UIRequest(json: .object(["id": .string("1"), "method": .string("input"), "title": .string("Paste your DeepSeek API key"), "placeholder": .string("sk-...")]))
+        let code = UIRequest(json: .object(["id": .string("2"), "method": .string("input"), "title": .string("Paste the authorization code (or full redirect URL):")]))
+        #expect(key?.isSecret == true)
+        #expect(code?.isSecret == false)
+    }
+
+    @Test("a page to open is taken from omp's launch address, or else its address")
+    func pageAddress() {
+        let both = UIRequest(json: .object(["id": .string("1"), "method": .string("open_url"), "url": .string("https://auth.openai.com/x"), "launchUrl": .string("http://localhost:1455/launch")]))
+        let only = UIRequest(json: .object(["id": .string("2"), "method": .string("open_url"), "url": .string("https://platform.deepseek.com/api_keys")]))
+        #expect(both?.launchURL == "http://localhost:1455/launch")
+        #expect(only?.launchURL == "https://platform.deepseek.com/api_keys")
+    }
+}

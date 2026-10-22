@@ -178,13 +178,29 @@ struct ComposerView: View {
             selected: session?.model?.selector,
             placeholder: "No model",
             plain: true,
-            help: session?.model.map { "\($0.selector) — the model that answers" } ?? "The model that answers"
+            help: session?.model.map { "\($0.selector) — the model that answers" } ?? "The model that answers",
+            // Like omp's model hub, the providers not signed in yet are
+            // listed too, and signing in is how their models are enabled.
+            more: store.providers.filter { !$0.authenticated }.map { provider in
+                Select.Item(id: Self.signInPrefix + provider.id, title: provider.name, detail: "Not signed in · \(provider.id)")
+            },
+            moreTitle: "Not signed in",
+            moreAction: "Sign in"
         ) { item in
-            if let found = session?.modelList.first(where: { $0.selector == item.id }) {
+            if item.id.hasPrefix(Self.signInPrefix) {
+                let id = String(item.id.dropFirst(Self.signInPrefix.count))
+                if let provider = store.providers.first(where: { $0.id == id }) {
+                    Task { await store.signIn(to: provider) }
+                }
+            } else if let found = session?.modelList.first(where: { $0.selector == item.id }) {
                 Task { await store.setModel(found) }
             }
         }
     }
+
+    /// Marks a picker row that signs in to a provider rather than choosing a
+    /// model.
+    private static let signInPrefix = "sign-in:"
 
     private var modeChip: some View {
         Select(

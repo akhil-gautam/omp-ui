@@ -37,6 +37,13 @@ struct Select: View {
     var plain = false
     /// What the chip is for, shown when the pointer rests on it.
     var help: String?
+    /// A second list under the first, under its own heading — for the model
+    /// picker, the providers not signed in yet, the way omp's model hub
+    /// shows them below the ones that are.
+    var more: [Item] = []
+    var moreTitle: String = ""
+    /// What a row of the second list offers, shown at its end.
+    var moreAction: String = ""
     let onSelect: (Item) -> Void
 
     @State private var open = false
@@ -44,12 +51,14 @@ struct Select: View {
     @State private var query = ""
 
     /// A list longer than this is worth searching.
-    private var searches: Bool { items.count > 12 }
+    private var searches: Bool { items.count + more.count > 12 }
 
-    private var filtered: [Item] {
+    private var filtered: [Item] { narrowed(items) }
+
+    private func narrowed(_ list: [Item]) -> [Item] {
         let needle = query.trimmingCharacters(in: .whitespaces)
-        guard !needle.isEmpty else { return items }
-        return items.filter { Select.matches($0, needle) }
+        guard !needle.isEmpty else { return list }
+        return list.filter { Select.matches($0, needle) }
     }
 
     /// Whether a row matches what the reader typed: its title, its detail or
@@ -132,44 +141,22 @@ struct Select: View {
                 // as they are scrolled to rather than all at once.
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(filtered) { item in
-                        Button {
-                            onSelect(item)
-                            open = false
-                        } label: {
-                            HStack(spacing: 10) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.title)
-                                        .font(Theme.body(12.5))
-                                        .foregroundStyle(palette.ink)
-                                        .lineLimit(1)
-                                    if let detail = item.detail {
-                                        Text(detail)
-                                            .font(Theme.body(11))
-                                            .foregroundStyle(palette.inkFaint)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-                                }
-                                Spacer(minLength: 8)
-                                if item.id == selected {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(palette.accent)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .fill(item.id == selected ? palette.raised : .clear)
-                            )
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .focusable(false)
-                        .help(item.tip)
+                        row(item, action: nil)
                     }
-                    if filtered.isEmpty {
+                    let others = narrowed(more)
+                    if !others.isEmpty {
+                        Text(moreTitle.uppercased())
+                            .font(Theme.label(9.5))
+                            .foregroundStyle(palette.inkFaint)
+                            .tracking(0.4)
+                            .padding(.horizontal, 12)
+                            .padding(.top, filtered.isEmpty ? 4 : 12)
+                            .padding(.bottom, 4)
+                        ForEach(others) { item in
+                            row(item, action: moreAction)
+                        }
+                    }
+                    if filtered.isEmpty && others.isEmpty {
                         Text("Nothing matches.")
                             .font(Theme.body(12))
                             .foregroundStyle(palette.inkFaint)
@@ -179,12 +166,60 @@ struct Select: View {
                 }
                 .padding(6)
             }
-            .frame(maxHeight: 320)
+            .frame(maxHeight: more.isEmpty ? 320 : 400)
         }
         .background(palette.panel)
         .background(PopoverBackground(colour: palette.panel))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.45), radius: 26, y: 10)
+    }
+
+    /// One row: its title and detail, and either the mark of the current
+    /// choice or what choosing it does.
+    private func row(_ item: Item, action: String?) -> some View {
+        Button {
+            onSelect(item)
+            open = false
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(Theme.body(12.5))
+                        .foregroundStyle(action == nil ? palette.ink : palette.inkDim)
+                        .lineLimit(1)
+                    if let detail = item.detail {
+                        Text(detail)
+                            .font(Theme.body(11))
+                            .foregroundStyle(palette.inkFaint)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: 8)
+                if let action {
+                    Text(action)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(palette.ground)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(palette.ink, in: Capsule())
+                } else if item.id == selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(palette.accent)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(item.id == selected ? palette.raised : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(item.tip)
     }
 }
 

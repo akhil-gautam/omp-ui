@@ -207,11 +207,15 @@ public struct UIRequest: Sendable, Identifiable, Equatable {
     public var message: String?
     public var options: [Option]
     public var placeholder: String?
+    /// The page to open, for an `open_url` request: the launch address when
+    /// omp gives one, else the address itself.
     public var launchURL: String?
+    /// What to do on that page, when omp says.
+    public var instructions: String?
     public var multi: Bool
     public var recommended: Int?
 
-    public init(id: String, method: String, title: String? = nil, message: String? = nil, options: [Option] = [], placeholder: String? = nil, launchURL: String? = nil, multi: Bool = false, recommended: Int? = nil) {
+    public init(id: String, method: String, title: String? = nil, message: String? = nil, options: [Option] = [], placeholder: String? = nil, launchURL: String? = nil, instructions: String? = nil, multi: Bool = false, recommended: Int? = nil) {
         self.id = id
         self.method = method
         self.title = title
@@ -219,6 +223,7 @@ public struct UIRequest: Sendable, Identifiable, Equatable {
         self.options = options
         self.placeholder = placeholder
         self.launchURL = launchURL
+        self.instructions = instructions
         self.multi = multi
         self.recommended = recommended
     }
@@ -235,7 +240,8 @@ public struct UIRequest: Sendable, Identifiable, Equatable {
             Option(label: option["label"].string, description: option["description"].optionalString)
         }
         self.placeholder = json["placeholder"].optionalString
-        self.launchURL = json["launchUrl"].optionalString
+        self.launchURL = json["launchUrl"].optionalString ?? json["url"].optionalString
+        self.instructions = json["instructions"].optionalString
         self.multi = json["multi"].bool
         self.recommended = json["recommended"].exactInteger
     }
@@ -253,5 +259,78 @@ public struct UIRequest: Sendable, Identifiable, Equatable {
         default:
             return ["type": .string("cancelled"), "timedOut": .bool(false)]
         }
+    }
+
+    /// Whether what is asked for is a secret — an API key, a token, a
+    /// password — and so is typed into a field that hides it.
+    public var isSecret: Bool {
+        let asked = [title, message, placeholder].compactMap { $0?.lowercased() }.joined(separator: " ")
+        return ["api key", "token", "password", "secret"].contains { asked.contains($0) }
+    }
+}
+
+/// A model provider omp can sign in to.
+public struct LoginProvider: Sendable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public var available: Bool
+    public var authenticated: Bool
+
+    public init(id: String, name: String, available: Bool = true, authenticated: Bool = false) {
+        self.id = id
+        self.name = name
+        self.available = available
+        self.authenticated = authenticated
+    }
+
+    public init?(json: JSONValue) {
+        guard let id = json["id"].optionalString else { return nil }
+        self.id = id
+        self.name = json["name"].optionalString ?? id
+        self.available = json["available"].bool
+        self.authenticated = json["authenticated"].bool
+    }
+
+    /// The subscriptions most people sign in with, offered first.
+    public static let featured = [
+        "anthropic", "openai-codex", "github-copilot", "google-antigravity",
+        "google-gemini-cli", "cursor", "xai-oauth", "kimi-code",
+    ]
+
+    /// The providers that can be offered, the well-known subscriptions
+    /// first in their order and the rest by name.
+    public static func ordered(_ providers: [LoginProvider]) -> [LoginProvider] {
+        let offered = providers.filter(\.available)
+        let first = featured.compactMap { id in offered.first { $0.id == id } }
+        let rest = offered.filter { !featured.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return first + rest
+    }
+
+    /// Why a sign-in did not finish, in words the reader can act on. omp
+    /// takes an API key only in its own terminal interface.
+    public static func explain(_ message: String, provider name: String) -> String {
+        if message.contains("requires secret input") || message.contains("requires interactive prompts") {
+            return "\(name) asks for its key in a way omp only accepts in its own interface: run omp in Terminal and type /login."
+        }
+        return message
+    }
+}
+
+/// A saved sign-in omp can remove.
+public struct LoginAccount: Sendable, Equatable, Identifiable {
+    public var id: Int { credentialID }
+    public var credentialID: Int
+    public var label: String
+
+    public init(credentialID: Int, label: String) {
+        self.credentialID = credentialID
+        self.label = label
+    }
+
+    public init?(json: JSONValue) {
+        guard let id = json["credentialId"].exactInteger else { return nil }
+        self.credentialID = id
+        self.label = json["label"].optionalString ?? json["detail"].string
     }
 }

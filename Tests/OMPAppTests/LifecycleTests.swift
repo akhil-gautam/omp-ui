@@ -8,15 +8,22 @@ import OMPCore
 /// turn ends with the reason, and the failed reply stays out of the history.
 /// Like omp, it echoes the message it was sent, settles a slash command
 /// itself, and ends each prompt it ran with a `prompt_result`; a message
-/// saying "slow" waits a second before its turn starts.
+/// saying "slow" waits a second before its turn starts. It signs in the way
+/// omp does: the page to open and a note first, then the answer; it can use
+/// a model only once signed in, and refuses a provider that takes a key.
 private func makeFakeOMP(in directory: URL) throws -> URL {
     let script = """
     #!/usr/bin/python3
-    import json, sys, time
+    import json, os, sys, time
     def say(frame):
         print(json.dumps(frame), flush=True)
     say({"type": "ready", "protocolVersion": 1, "supportedProtocolVersions": [1, 2], "maxFrameBytes": 1048576})
     messages = []
+    signed_in = set()
+    claude = {"id": "claude-opus-5-5", "name": "Claude Opus 5.5", "provider": "anthropic"}
+    gateway = {"id": "anthropic/claude-opus-5.5", "name": "Claude Opus 5.5", "provider": "openrouter"}
+    # Like an API key a shell profile exports: present only if it reached omp.
+    keyed = bool(os.environ.get("OMP_UI_TEST_OPENROUTER_KEY"))
     for line in sys.stdin:
         try:
             message = json.loads(line)
@@ -32,6 +39,31 @@ private func makeFakeOMP(in directory: URL) throws -> URL {
             data = {"messages": messages}
         elif kind == "prompt":
             data = {"agentInvoked": not local}
+        elif kind == "get_available_models":
+            data = {"models": ([claude] if "anthropic" in signed_in else []) + ([gateway] if keyed else [])}
+        elif kind == "get_login_providers":
+            data = {"providers": [
+                {"id": "vault", "name": "Key Vault", "available": True, "authenticated": False},
+                {"id": "openrouter", "name": "OpenRouter", "available": True, "authenticated": keyed},
+                {"id": "anthropic", "name": "Anthropic (Claude Pro/Max)", "available": True, "authenticated": "anthropic" in signed_in},
+                {"id": "retired", "name": "Retired", "available": False, "authenticated": False},
+            ]}
+        elif kind == "get_logout_accounts":
+            data = {"accounts": [{"credentialId": 7, "provider": "anthropic", "label": "me@example.com", "detail": "", "type": "oauth", "active": True}] if "anthropic" in signed_in else []}
+        elif kind == "logout":
+            if message.get("credentialId") == 7:
+                signed_in.discard(message.get("providerId"))
+        elif kind == "login":
+            provider = message.get("providerId")
+            if provider == "vault":
+                say({"id": message.get("id"), "type": "response", "command": kind, "success": False,
+                     "error": "Provider 'vault' requires secret input, which is not supported in RPC mode. Use the terminal UI to log in."})
+                continue
+            say({"type": "extension_ui_request", "id": "page", "method": "open_url", "url": "https://claude.ai/oauth/authorize?code=true", "instructions": "Approve omp in your browser"})
+            say({"type": "extension_ui_request", "id": "note", "method": "notify", "message": "Waiting for the browser"})
+            time.sleep(0.3)
+            signed_in.add(provider)
+            data = {"providerId": provider}
         say({"id": message.get("id"), "type": "response", "command": kind, "success": True, "data": data})
         if kind == "prompt" and not local:
             user = {"role": "user", "content": text}
@@ -60,7 +92,7 @@ struct LifecycleTests {
         let project = root.appendingPathComponent("project")
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         let fake = try makeFakeOMP(in: root)
-        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")), locate: { fake.path })
+        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")), locate: { _ in fake.path })
         await store.addProject(path: project.path)
         let session = try #require(store.active)
         return (store, session, root)
@@ -173,7 +205,7 @@ struct SetupTests {
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         let store = AppStore(
             store: ProjectStore(url: root.appendingPathComponent("projects.json")),
-            locate: { FileManager.default.isExecutableFile(atPath: place.path) ? place.path : nil }
+            locate: { _ in FileManager.default.isExecutableFile(atPath: place.path) ? place.path : nil }
         )
         await store.addProject(path: project.path)
         return (store, root)
@@ -248,5 +280,115 @@ struct SetupTests {
         await store.installOMP(command: "echo installed elsewhere")
         #expect(store.ompMissing)
         #expect(store.installFailure?.contains("Choose omp") == true)
+    }
+}
+
+@Suite("Signing in through omp", .serialized)
+@MainActor
+struct SignInTests {
+    /// Pages the store asked to open, kept instead of opened.
+    private final class Browser {
+        var opened: [URL] = []
+    }
+
+    private func makeStore() async throws -> (AppStore, ProjectSession, Browser, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-signin-\(UUID().uuidString)")
+        let project = root.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let fake = try makeFakeOMP(in: root)
+        let browser = Browser()
+        let store = AppStore(
+            store: ProjectStore(url: root.appendingPathComponent("projects.json")),
+            locate: { _ in fake.path },
+            openURL: { browser.opened.append($0) }
+        )
+        await store.addProject(path: project.path)
+        return (store, try #require(store.active), browser, root)
+    }
+
+    @Test("with no model to use, signing in opens the provider's page and brings the models")
+    func signingInBringsModels() async throws {
+        let (store, session, browser, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(session.needsSignIn)
+
+        await store.loadProviders()
+        // The well-known subscription first; one omp cannot offer is left out.
+        #expect(store.providers.map(\.id) == ["anthropic", "vault", "openrouter"])
+
+        await store.signIn(to: store.providers[0])
+        #expect(browser.opened == [URL(string: "https://claude.ai/oauth/authorize?code=true")!])
+        #expect(store.signIn == nil)
+        #expect(!session.needsSignIn)
+        #expect(session.model?.selector == "anthropic/claude-opus-5-5")
+        #expect(store.providers.first?.authenticated == true)
+        await store.close(session.project.id)
+    }
+
+    @Test("a provider omp will only sign in to in its own interface says so")
+    func keyProvidersSayWhere() async throws {
+        let (store, session, browser, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.loadProviders()
+
+        await store.signIn(to: try #require(store.providers.first { $0.id == "vault" }))
+        #expect(browser.opened.isEmpty)
+        #expect(store.signIn?.failure == "Key Vault asks for its key in a way omp only accepts in its own interface: run omp in Terminal and type /login.")
+        store.dismissSignIn()
+        #expect(store.signIn == nil)
+        await store.close(session.project.id)
+    }
+
+    @Test("signing out removes the saved sign-in and the models with it")
+    func signingOut() async throws {
+        let (store, session, _, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.loadProviders()
+        await store.signIn(to: store.providers[0])
+        #expect(!session.needsSignIn)
+
+        await store.signOut(of: store.providers[0])
+        #expect(store.providers.first?.authenticated == false)
+        #expect(session.needsSignIn)
+        await store.close(session.project.id)
+    }
+}
+
+@Suite("omp started with the reader's shell environment", .serialized)
+@MainActor
+struct EnvironmentTests {
+    private func makeStore(shell: [String: String]) async throws -> (AppStore, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-environment-\(UUID().uuidString)")
+        let project = root.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let fake = try makeFakeOMP(in: root)
+        let store = AppStore(
+            store: ProjectStore(url: root.appendingPathComponent("projects.json")),
+            locate: { _ in fake.path },
+            readEnvironment: { ["PATH": "/usr/bin:/bin"].merging(shell) { _, new in new } }
+        )
+        await store.loadEnvironment()
+        await store.addProject(path: project.path)
+        return (store, root)
+    }
+
+    @Test("a key the shell profile exports gives omp that provider's models")
+    func profileKeyBringsModels() async throws {
+        let (store, root) = try await makeStore(shell: ["OMP_UI_TEST_OPENROUTER_KEY": "from-profile"])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = try #require(store.active)
+        #expect(session.modelList.map(\.selector) == ["openrouter/anthropic/claude-opus-5.5"])
+        #expect(store.providers.first { $0.id == "openrouter" }?.authenticated == true)
+        await store.close(session.project.id)
+    }
+
+    @Test("without the key, that provider is offered to sign in to instead")
+    func noKeyNoModels() async throws {
+        let (store, root) = try await makeStore(shell: [:])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = try #require(store.active)
+        #expect(session.modelList.isEmpty)
+        #expect(store.providers.first { $0.id == "openrouter" }?.authenticated == false)
+        await store.close(session.project.id)
     }
 }
