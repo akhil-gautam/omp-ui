@@ -23,11 +23,17 @@ public struct Notice: Identifiable, Sendable, Equatable {
     }
 }
 
-/// One project, and everything the interface shows about it.
+/// One conversation in a project, the omp that holds it, and everything the
+/// interface shows about it. A project has as many as the reader opens, and
+/// each runs on its own.
 @MainActor
 @Observable
 public final class ProjectSession {
+    public let id = UUID().uuidString
     public let project: Project
+    /// When the conversation was opened in the app: what orders one omp has
+    /// not written to disk yet.
+    public let opened = Date()
     public var status: SessionStatus = .stopped
     public var blocks: [Block] = []
     public var queue = Queue()
@@ -60,8 +66,11 @@ public final class ProjectSession {
     /// they belong to has been read.
     @ObservationIgnored public var recordedFailures: (failures: [History.Failure], turns: Int)?
 
-    public init(project: Project) {
+    /// A conversation, resuming the one omp keeps at `sessionFile`, or a new
+    /// one when there is none.
+    public init(project: Project, sessionFile: String? = nil) {
         self.project = project
+        self.sessionFile = sessionFile
     }
 
     public var isBusy: Bool { status == .busy }
@@ -78,9 +87,20 @@ public final class ProjectSession {
     /// Whether omp has said it has nothing left running in the background —
     /// no async command, no subagent — that could wake the session.
     @ObservationIgnored public var settled = true
-    /// The conversation omp has open, so a project woken from sleep resumes
-    /// that one and not merely the newest.
-    @ObservationIgnored public var sessionFile: String?
+    /// The file omp keeps the conversation in, so a conversation woken from
+    /// sleep resumes itself, and the rail matches it to what is on disk.
+    public var sessionFile: String?
+
+    /// What the conversation is called before omp has written it: the first
+    /// thing said in it.
+    public var title: String? {
+        for block in blocks {
+            guard case .user(_, let text) = block else { continue }
+            let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+            return line.count > 80 ? String(line.prefix(79)) + "…" : line
+        }
+        return nil
+    }
 
     /// Whether omp is up with nothing to do — no turn, no question waiting,
     /// nothing queued, no command running, nothing in the background — and
@@ -107,14 +127,38 @@ public struct SignIn: Equatable {
     public var failure: String?
 }
 
-/// The app's root store: the projects, their sessions, and what the reader
-/// is looking at.
+/// One conversation as the rail lists it: one with an omp open, one on disk,
+/// or both.
+public struct Conversation: Identifiable {
+    public var id: String
+    public var projectID: String
+    public var title: String
+    /// When it was last written to, or opened if it has not been.
+    public var date: Date
+    public var path: String?
+    /// The conversation's omp and transcript, when it has been opened.
+    public var session: ProjectSession?
+}
+
+/// The app's root store: the projects, their conversations, and what the
+/// reader is looking at.
 @MainActor
 @Observable
 public final class AppStore {
     public var projects: [Project] = []
+    /// The project open in the window.
     public var activeID: String?
+    /// The conversation open in the window.
+    public var activeSessionID: String?
+    /// Every conversation opened, by its id.
     public var sessions: [String: ProjectSession] = [:]
+    /// The conversations omp has written for each project, newest first.
+    public var conversationFiles: [String: [SessionFile]] = [:]
+    /// The projects whose conversations the rail shows.
+    public var expanded: Set<String> = []
+    /// The conversation last open in each project, which opening the project
+    /// returns to.
+    @ObservationIgnored private var lastViewed: [String: String] = [:]
     public var banner: String?
     /// Text for the composer to take up — from a starter on the empty page —
     /// and focus on. The composer clears it once taken.
@@ -200,8 +244,13 @@ public final class AppStore {
     }
 
     public var active: ProjectSession? {
-        guard let activeID else { return nil }
-        return sessions[activeID]
+        guard let activeSessionID else { return nil }
+        return sessions[activeSessionID]
+    }
+
+    /// A project's conversations that have been opened.
+    public func sessions(of projectID: String) -> [ProjectSession] {
+        sessions.values.filter { $0.project.id == projectID }
     }
 
     /// How omp asks before it acts, as configured.
@@ -249,23 +298,47 @@ public final class AppStore {
         }
     }
 
-    /// Opens a project: shows it, and starts its omp unless it is already up.
+    /// Opens a project: shows the conversation last open in it — or, the
+    /// first time, the newest one omp kept — and starts its omp unless it is
+    /// already up.
     public func open(_ id: String, record: Bool = true) async {
         guard let project = projects.first(where: { $0.id == id }) else { return }
+        show(project: id, record: record)
+        if let last = lastViewed[id].flatMap({ sessions[$0] }) {
+            await show(last)
+            return
+        }
+        await loadConversations(id)
+        await show(add(project, sessionFile: conversationFiles[id]?.first?.path))
+    }
+
+    /// Makes a project the open one, and remembers it for going back.
+    private func show(project id: String, record: Bool = true) {
         activeID = id
+        expanded.insert(id)
         if record {
             history.removeAll { $0 == id }
             history.insert(id, at: 0)
             if history.count > 24 { history.removeLast() }
             historyIndex = 0
         }
+    }
 
-        let session = sessions[id] ?? ProjectSession(project: project)
-        sessions[id] = session
-        // A project that is already up is only shown: starting it again would
-        // put a second omp on the same session and drop the first. One that
-        // was put to sleep for sitting idle is only shown too; the next
-        // message wakes it.
+    /// A conversation the app has not opened before.
+    private func add(_ project: Project, sessionFile: String?) -> ProjectSession {
+        let session = ProjectSession(project: project, sessionFile: sessionFile)
+        sessions[session.id] = session
+        return session
+    }
+
+    /// Shows a conversation, starting its omp unless it is already up.
+    private func show(_ session: ProjectSession) async {
+        activeSessionID = session.id
+        lastViewed[session.project.id] = session.id
+        // One that is already up is only shown: starting it again would put
+        // a second omp on the same conversation and drop the first. One put
+        // to sleep for sitting idle is only shown too; the next message
+        // wakes it.
         if let process = session.process, await process.isRunning() { return }
         if session.status == .asleep { return }
         await start(session)
@@ -300,23 +373,17 @@ public final class AppStore {
         }
         ompMissing = false
 
-        let id = project.id
+        let id = session.id
         let process = AgentProcess(project: project, executable: executable, environment: environment) { [weak self] frame in
             await MainActor.run { self?.apply(frame, to: id) }
         }
         session.process = process
 
         do {
-            // A project that has been worked on before picks up where it
-            // left off.
-            // A project woken from sleep resumes the conversation it had
-            // open — unless omp never wrote it, which it does only once a
-            // reply comes, and then it starts afresh rather than in another.
-            let resume: String? = if let file = session.sessionFile {
-                FileManager.default.fileExists(atPath: file) ? file : nil
-            } else {
-                SessionFiles.sessions(for: project.path).first?.path
-            }
+            // A conversation picks up where it left off — unless omp never
+            // wrote it, which it does only once a reply comes, and then it
+            // starts afresh rather than in another.
+            let resume = session.sessionFile.flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
             try await process.start(resuming: resume)
             if let resume {
                 session.recordedFailures = await Task.detached {
@@ -325,7 +392,7 @@ public final class AppStore {
             }
             try await process.setMode(session.mode)
             session.status = .idle
-            await refresh(id)
+            await refresh(session)
         } catch {
             // A start that failed leaves nothing behind, so the next message
             // starts omp again instead of talking to a process that is gone.
@@ -412,8 +479,8 @@ public final class AppStore {
         guard stopIdleAfterMinutes > 0 else { return }
         let limit = TimeInterval(stopIdleAfterMinutes * 60)
         for session in sessions.values where session.isIdle(at: now, for: limit) {
-            // A sign-in runs through the open project's omp.
-            if signIn != nil, session.project.id == activeID { continue }
+            // A sign-in runs through the open conversation's omp.
+            if signIn != nil, session === active { continue }
             let process = session.process
             session.process = nil
             session.status = .asleep
@@ -437,11 +504,17 @@ public final class AppStore {
         await open(history[index], record: false)
     }
 
-    /// Ends a project's omp, which gives its memory back.
+    /// Ends the omp of every conversation in a project, which gives their
+    /// memory back.
     public func close(_ id: String) async {
-        guard let session = sessions[id] else { return }
+        for session in sessions(of: id) { await stop(session) }
+    }
+
+    /// Ends one conversation's omp. What it shows stays; the next message
+    /// starts omp again in the same conversation.
+    public func stop(_ session: ProjectSession) async {
         // A start in progress finishes first, so it cannot attach a process
-        // after the project has been closed.
+        // after the conversation has been stopped.
         if let starting = session.starting { await starting.value }
         let process = session.process
         session.process = nil
@@ -458,11 +531,17 @@ public final class AppStore {
 
     public func removeProject(_ id: String) async {
         await close(id)
-        sessions.removeValue(forKey: id)
+        for session in sessions(of: id) { sessions.removeValue(forKey: session.id) }
+        lastViewed.removeValue(forKey: id)
+        conversationFiles.removeValue(forKey: id)
+        expanded.remove(id)
         projects.removeAll { $0.id == id }
         history.removeAll { $0 == id }
         historyIndex = min(historyIndex, max(history.count - 1, 0))
-        if activeID == id { activeID = projects.first?.id }
+        if activeID == id {
+            activeID = projects.first?.id
+            activeSessionID = activeID.flatMap { lastViewed[$0] }
+        }
         persist()
     }
 
@@ -472,13 +551,10 @@ public final class AppStore {
 
     // MARK: - Reading
 
-    /// Reads everything the interface shows about a project.
-    public func refresh(_ id: String) async {
-        guard let session = sessions[id], let process = session.process else { return }
-        if let path = project(id)?.path {
-            session.branch = Git.branch(of: path)
-        }
-
+    /// Reads everything the interface shows about a conversation.
+    public func refresh(_ session: ProjectSession) async {
+        guard let process = session.process else { return }
+        session.branch = Git.branch(of: session.project.path)
         do {
             let state = try await process.state()
             session.model = ModelInfo(json: state["model"])
@@ -529,10 +605,6 @@ public final class AppStore {
         }
     }
 
-    private func project(_ id: String) -> Project? {
-        projects.first { $0.id == id }
-    }
-
     // MARK: - Signing in
 
     /// Reads which providers omp can sign in to, through the open project.
@@ -557,8 +629,8 @@ public final class AppStore {
             guard signIn?.token == flow.token else { return }
             signIn = nil
             await loadProviders()
-            for (id, other) in sessions where other.process != nil {
-                await refresh(id)
+            for other in sessions.values where other.process != nil {
+                await refresh(other)
             }
             if session.model == nil, let model = session.modelList.first(where: { $0.provider == provider.id }) ?? session.modelList.first {
                 await setModel(model)
@@ -587,8 +659,8 @@ public final class AppStore {
                 try await process.logout(provider: provider.id, account: account.credentialID)
             }
             await loadProviders()
-            for (id, other) in sessions where other.process != nil {
-                await refresh(id)
+            for other in sessions.values where other.process != nil {
+                await refresh(other)
             }
         } catch {
             banner = error.localizedDescription
@@ -642,31 +714,69 @@ public final class AppStore {
         }
     }
 
-    /// The open project's conversations, newest first.
-    public func conversations() -> [SessionFile] {
-        guard let session = active else { return [] }
-        return SessionFiles.sessions(for: session.project.path)
+    // MARK: - Conversations
+
+    /// Reads which conversations omp has written for a project. Only the
+    /// files written to since the last look are read again.
+    public func loadConversations(_ projectID: String) async {
+        guard let path = projects.first(where: { $0.id == projectID })?.path else { return }
+        let known = Dictionary((conversationFiles[projectID] ?? []).map { ($0.path, $0) }) { first, _ in first }
+        conversationFiles[projectID] = await Task.detached { SessionFiles.sessions(for: path, known: known) }.value
     }
 
-    /// Switches the open project to one of its earlier conversations.
-    public func openConversation(_ file: SessionFile) async {
-        guard let session = active, let process = await liveProcess(session) else { return }
-        do {
-            guard try await process.switchSession(path: file.path) else {
-                banner = "omp would not open \u{201C}\(file.title)\u{201D}: it was recorded in another folder."
-                return
-            }
-            // The failures kept belonged to the conversation being left; the
-            // new one's are read from its file.
-            session.failures = []
-            session.unplacedFailures = []
-            session.recordedFailures = await Task.detached {
-                History.failures(inSessionFile: URL(fileURLWithPath: file.path))
-            }.value
-            await refresh(session.project.id)
-        } catch {
-            banner = error.localizedDescription
+    /// What the open conversation is called: omp's title for it, the first
+    /// thing said in it, or that it is new.
+    public var activeTitle: String? {
+        guard let session = active else { return nil }
+        if let file = session.sessionFile,
+           let written = conversationFiles[session.project.id]?.first(where: { $0.path == file }) {
+            return written.title
         }
+        return session.title ?? "New conversation"
+    }
+
+    /// A project's conversations, newest first: those omp has written, and
+    /// those open in the app that it has not written yet.
+    public func conversations(in projectID: String) -> [Conversation] {
+        let open = sessions(of: projectID)
+        var byFile: [String: ProjectSession] = [:]
+        for session in open {
+            if let file = session.sessionFile { byFile[file] = session }
+        }
+        let files = conversationFiles[projectID] ?? []
+        let written = Set(files.map(\.path))
+        var list = files.map { file in
+            let session = byFile[file.path]
+            return Conversation(id: session?.id ?? file.path, projectID: projectID, title: file.title,
+                                date: file.modified, path: file.path, session: session)
+        }
+        for session in open where !(session.sessionFile.map(written.contains) ?? false) {
+            list.append(Conversation(id: session.id, projectID: projectID, title: session.title ?? "New conversation",
+                                     date: session.opened, path: session.sessionFile, session: session))
+        }
+        return list.sorted { $0.date > $1.date }
+    }
+
+    /// Opens a conversation: the one already open in the app, or omp
+    /// started on the file it was kept in. The one left keeps working.
+    public func openConversation(_ conversation: Conversation) async {
+        guard let project = projects.first(where: { $0.id == conversation.projectID }) else { return }
+        show(project: project.id)
+        if let session = conversation.session ?? conversation.path.flatMap({ path in
+            sessions(of: project.id).first { $0.sessionFile == path }
+        }) {
+            await show(session)
+        } else {
+            await show(add(project, sessionFile: conversation.path))
+        }
+    }
+
+    /// Starts a new conversation in a project — the open one if none is
+    /// named — with its own omp. The others keep working.
+    public func newConversation(in projectID: String? = nil) async {
+        guard let id = projectID ?? activeID, let project = projects.first(where: { $0.id == id }) else { return }
+        show(project: id)
+        await show(add(project, sessionFile: nil))
     }
 
     /// Ends the wait for a turn omp is not going to run.
@@ -733,22 +843,6 @@ public final class AppStore {
         }
     }
 
-    /// Starts a new conversation in the open project. What belonged to the
-    /// one being left — its failures, the file omp kept it in — goes with it.
-    public func newConversation() async {
-        guard let session = active, let process = await liveProcess(session) else { return }
-        do {
-            try await process.newSession()
-            session.failures = []
-            session.unplacedFailures = []
-            session.recordedFailures = nil
-            session.sessionFile = nil
-            await refresh(session.project.id)
-        } catch {
-            banner = error.localizedDescription
-        }
-    }
-
     // MARK: - The event stream
 
     private func apply(_ frame: JSONValue, to id: String) {
@@ -766,7 +860,12 @@ public final class AppStore {
             session.status = .idle
             session.turnStarted = nil
             session.unplacedFailures += History.failureReasons(in: frame)
-            Task { await self.refresh(id) }
+            Task {
+                await self.refresh(session)
+                // A first reply writes the conversation; every reply may
+                // retitle it.
+                await self.loadConversations(session.project.id)
+            }
         case "message_start":
             let messageID = frame["messageId"].string
             let role = frame["message"]["role"].string

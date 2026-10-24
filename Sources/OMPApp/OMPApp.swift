@@ -21,6 +21,11 @@ struct OMPApp: App {
                     Task { await store.addProjectPicker() }
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                Button("New Conversation") {
+                    Task { await store.newConversation() }
+                }
+                .keyboardShortcut("t", modifiers: .command)
+                .disabled(store.activeID == nil)
             }
         }
     }

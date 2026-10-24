@@ -40,10 +40,13 @@ private func makeFakeOMP(in directory: URL) throws -> URL {
         elif kind == "prompt":
             data = {"agentInvoked": not local}
         elif kind == "get_state":
-            # The conversation it has open, written to disk as omp writes one.
-            os.makedirs("/tmp/omp-ui-fake", exist_ok=True)
-            open("/tmp/omp-ui-fake/conversation-b.jsonl", "a").close()
-            data = {"sessionFile": "/tmp/omp-ui-fake/conversation-b.jsonl", "argv": sys.argv[1:]}
+            # The conversation it has open, written to disk as omp writes one:
+            # the one it resumed, or its own.
+            os.makedirs("\(directory.path)/conversations", exist_ok=True)
+            argv = sys.argv[1:]
+            session = argv[argv.index("--resume") + 1] if "--resume" in argv else "\(directory.path)/conversations/%d.jsonl" % os.getpid()
+            open(session, "a").close()
+            data = {"sessionFile": session, "argv": argv}
         elif kind == "get_available_models":
             data = {"models": ([claude] if "anthropic" in signed_in else []) + ([gateway] if keyed else [])}
         elif kind == "get_login_providers":
@@ -412,7 +415,7 @@ struct IdleTests {
         let session = try #require(store.active)
         await store.send("hello")
         for _ in 0..<50 where session.isWorking { try await Task.sleep(for: .milliseconds(50)) }
-        await store.refresh(session.project.id)
+        await store.refresh(session)
         return (store, session, root)
     }
 
@@ -438,6 +441,7 @@ struct IdleTests {
     func messageWakes() async throws {
         let (store, session, root) = try await makeStore()
         defer { try? FileManager.default.removeItem(at: root) }
+        let conversation = try #require(session.sessionFile)
         await store.stopIdleAgents(at: later)
         #expect(session.status == .asleep)
 
@@ -450,7 +454,7 @@ struct IdleTests {
         let process = try #require(session.process)
         #expect(await process.isRunning())
         let argv = try await process.state()["argv"].array.map(\.string)
-        #expect(argv.suffix(2) == ["--resume", "/tmp/omp-ui-fake/conversation-b.jsonl"])
+        #expect(argv.suffix(2) == ["--resume", conversation])
         await store.close(session.project.id)
     }
 
@@ -497,5 +501,119 @@ struct IdleTests {
         await store.stopIdleAgents(at: later)
         #expect(session.process != nil)
         await store.close(session.project.id)
+    }
+}
+
+@Suite("Many conversations in a project", .serialized)
+@MainActor
+struct ConversationTests {
+    private func makeStore() async throws -> (AppStore, ProjectSession, URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("omp-ui-conversations-\(UUID().uuidString)")
+        let project = root.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let fake = try makeFakeOMP(in: root)
+        let store = AppStore(store: ProjectStore(url: root.appendingPathComponent("projects.json")), locate: { _ in fake.path })
+        await store.addProject(path: project.path)
+        return (store, try #require(store.active), root)
+    }
+
+    @Test("a new conversation gets its own omp, starting afresh, and the first keeps running")
+    func newConversationRunsBeside() async throws {
+        let (store, first, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstProcess = try #require(first.process)
+
+        await store.newConversation()
+        let second = try #require(store.active)
+        #expect(second !== first)
+        #expect(second.project.id == first.project.id)
+        #expect(store.sessions(of: first.project.id).count == 2)
+        #expect(first.process === firstProcess)
+        #expect(await firstProcess.isRunning())
+        let argv = try await #require(second.process).state()["argv"].array.map(\.string)
+        #expect(!argv.contains("--resume"))
+        #expect(second.sessionFile != first.sessionFile)
+
+        // A message goes to the conversation that is open, and only to it.
+        await store.send("only here")
+        #expect(second.blocks.contains { $0.text == "only here" })
+        #expect(!first.blocks.contains { $0.text == "only here" })
+        await store.close(first.project.id)
+        #expect(first.process == nil && second.process == nil)
+    }
+
+    @Test("each conversation is listed once, newest first, named by what was said in it")
+    func theListNamesEach() async throws {
+        let (store, first, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.newConversation()
+        let second = try #require(store.active)
+        await store.send("fix the upload limit\nand the tests")
+
+        let listed = store.conversations(in: first.project.id)
+        #expect(listed.count == 2)
+        #expect(listed.first?.session === second)
+        #expect(listed.first?.title == "fix the upload limit")
+        #expect(listed.last?.session === first)
+        #expect(listed.last?.title == "New conversation")
+        #expect(store.activeTitle == "fix the upload limit")
+        await store.close(first.project.id)
+    }
+
+    @Test("going back to a conversation shows the same one, with its omp left alone")
+    func goingBackKeepsIt() async throws {
+        let (store, first, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstProcess = try #require(first.process)
+        await store.newConversation()
+        let second = try #require(store.active)
+
+        let entry = try #require(store.conversations(in: first.project.id).first { $0.session === first })
+        await store.openConversation(entry)
+        #expect(store.active === first)
+        #expect(first.process === firstProcess)
+        #expect(store.sessions(of: first.project.id).count == 2)
+
+        // Opening the project again returns to the conversation last open.
+        await store.openConversation(try #require(store.conversations(in: first.project.id).first { $0.session === second }))
+        await store.open(first.project.id)
+        #expect(store.active === second)
+        await store.close(first.project.id)
+    }
+
+    @Test("a conversation on disk opens with omp resuming it")
+    func aWrittenConversationResumes() async throws {
+        let (store, first, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("earlier.jsonl").path
+        FileManager.default.createFile(atPath: file, contents: Data())
+
+        await store.openConversation(Conversation(id: file, projectID: first.project.id, title: "Earlier",
+                                                  date: .distantPast, path: file, session: nil))
+        let opened = try #require(store.active)
+        #expect(opened !== first)
+        let argv = try await #require(opened.process).state()["argv"].array.map(\.string)
+        #expect(argv.suffix(2) == ["--resume", file])
+
+        // Opened a second time, it is the same conversation, not another omp.
+        await store.openConversation(Conversation(id: file, projectID: first.project.id, title: "Earlier",
+                                                  date: .distantPast, path: file, session: nil))
+        #expect(store.active === opened)
+        #expect(store.sessions(of: first.project.id).count == 2)
+        await store.close(first.project.id)
+    }
+
+    @Test("stopping one conversation leaves the others running")
+    func stoppingOne() async throws {
+        let (store, first, root) = try await makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+        await store.newConversation()
+        let second = try #require(store.active)
+
+        await store.stop(first)
+        #expect(first.process == nil)
+        #expect(first.status == .stopped)
+        #expect(await second.process?.isRunning() == true)
+        await store.close(first.project.id)
     }
 }

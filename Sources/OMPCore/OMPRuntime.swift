@@ -177,8 +177,10 @@ public enum SessionFiles {
 
     /// The sessions whose working directory is `path`.
     ///
-    /// The store keeps one bucket per working directory, named after it.
-    public static func sessions(for path: String) -> [SessionFile] {
+    /// The store keeps one bucket per working directory, named after it. A
+    /// file in `known` that has not changed since keeps the title read
+    /// before, so listing again reads only what omp has written to since.
+    public static func sessions(for path: String, known: [String: SessionFile] = [:]) -> [SessionFile] {
         guard let root = root() else { return [] }
         let bucket = root.appendingPathComponent(encoding(for: path), isDirectory: true)
         let manager = FileManager.default
@@ -186,8 +188,12 @@ public enum SessionFiles {
 
         var found: [SessionFile] = []
         for file in files where file.pathExtension == "jsonl" {
-            let values = try? file.resourceValues(forKeys: [.contentModificationDateKey])
-            found.append(SessionFile(path: file.path, title: title(from: file), modified: values?.contentModificationDate ?? .distantPast))
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if let previous = known[file.path], previous.modified == modified {
+                found.append(previous)
+            } else {
+                found.append(SessionFile(path: file.path, title: title(from: file), modified: modified))
+            }
         }
         return found.sorted { $0.modified > $1.modified }
     }

@@ -1,9 +1,10 @@
 import Foundation
 
-/// One project, and the omp process that works on it.
+/// One conversation in a project, and the omp process that holds it.
 ///
-/// The process stays alive for as long as the project is open, so omp keeps
-/// its session, its queued messages and any background work between visits.
+/// The process stays alive while the conversation is in use, so omp keeps
+/// its queued messages and any background work between visits. A project's
+/// conversations each have their own, and work side by side.
 public actor AgentProcess {
     public typealias FrameHandler = @Sendable (JSONValue) async -> Void
 
@@ -143,14 +144,6 @@ public actor AgentProcess {
         _ = try await call("extension_ui_response", payload)
     }
 
-    /// Switches to another of the project's sessions. Returns false when omp
-    /// refused: it will not switch to a session recorded in another folder.
-    @discardableResult
-    public func switchSession(path: String) async throws -> Bool {
-        let reply = try await call("switch_session", ["sessionPath": .string(path)])
-        return !reply["cancelled"].bool
-    }
-
     /// The providers omp can sign in to, and which it is signed in to.
     public func loginProviders() async throws -> [LoginProvider] {
         try await call("get_login_providers")["providers"].array.compactMap(LoginProvider.init(json:))
@@ -170,10 +163,6 @@ public actor AgentProcess {
     /// Removes a saved sign-in.
     public func logout(provider: String, account: Int) async throws {
         _ = try await call("logout", ["providerId": .string(provider), "credentialId": .number(Double(account))])
-    }
-
-    public func newSession() async throws {
-        _ = try await call("new_session")
     }
 
     public func compact() async throws {

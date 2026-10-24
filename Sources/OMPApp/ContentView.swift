@@ -43,6 +43,16 @@ struct TopBarView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(palette.ink)
                     .lineLimit(1)
+                if let title = store.activeTitle {
+                    Text("/")
+                        .font(.system(size: 13))
+                        .foregroundStyle(palette.inkFaint)
+                    // Cut short here, so the pill keeps hugging its words.
+                    Text(title.count > 44 ? String(title.prefix(43)) + "…" : title)
+                        .font(.system(size: 13))
+                        .foregroundStyle(palette.inkDim)
+                        .lineLimit(1)
+                }
                 Text(statusLabel)
                     .font(Theme.label(9.5))
                     .tracking(0.6)
@@ -51,7 +61,7 @@ struct TopBarView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .glass(radius: 999)
-            .help(store.active.map { "\($0.project.displayPath) — \(statusLabel.lowercased())" } ?? "No project is open")
+            .help(store.active.map { "\($0.project.displayPath)\(store.activeTitle.map { " — \($0)" } ?? "") — \(statusLabel.lowercased())" } ?? "No project is open")
         }
         .padding(.horizontal, 12)
         .frame(height: 46)

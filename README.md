@@ -11,7 +11,7 @@ JSON over stdio — and streams everything they produce into the window.
 
 ```
 ┌──────────────┐   JSON lines over stdio   ┌─────────────────────────────┐
-│  omp-ui      │◀──────────────────────────▶│  omp (per open project)     │
+│  omp-ui      │◀──────────────────────────▶│  omp (per open conversation)│
 │  (SwiftUI)   │                            │  one `omp --mode rpc-ui`    │
 └──────────────┘                            └─────────────────────────────┘
 ```
@@ -48,9 +48,15 @@ has sessions on disk, the most recent one is resumed.
 
 ## What it does
 
-- **Projects.** Each project runs its own omp process, concurrently. The
-  sidebar shows every project's live state. The project you were last using is
-  reopened on the next launch.
+- **Projects and conversations.** The rail lists each project with its
+  conversations under it, newest first: the ones omp has kept on disk and the
+  ones open in the app. *New conversation* — under a project, on its hover
+  **+**, or ⌘T — starts another with its own omp process, so a project can
+  have several agents working side by side; switching to another conversation
+  leaves the one you left working. Each conversation's dot shows what its
+  agent is doing, and the project's dot what its busiest one is; the top bar
+  names the project and the conversation. The project you were last using is
+  reopened on the next launch, in its most recent conversation.
 - **Transcripts.** Replies are rendered as markdown: headings, lists, tables,
   task lists, and fenced code with syntax highlighting and a copy button.
   Thinking is always shown — it is the reasoning, not a summary. A tool call
@@ -71,8 +77,8 @@ has sessions on disk, the most recent one is resumed.
   - *Skills* and *Slash commands* are omp's own, with their descriptions and
     the arguments a command takes, and start the message.
   - *Conversations* lists the project's conversations, marks the one that is
-    open, switches to another or starts a new one; one omp has not titled is
-    named by the first thing said in it.
+    open, opens another or starts a new one, each with its own agent; one omp
+    has not titled is named by the first thing said in it.
   - *Git* points at the uncommitted or staged changes, a branch or a commit,
     each commit by its subject, hash and age.
   - *Rules* lists the rules files omp works under — `.omp/rules`, `AGENTS.md`,

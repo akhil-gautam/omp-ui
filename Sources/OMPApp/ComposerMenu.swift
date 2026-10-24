@@ -58,7 +58,7 @@ struct ComposerMenu: View {
             case .files: "Name a file in the project so omp reads it"
             case .directories: "Name a folder so omp sees what is in it"
             case .skills: "Run one of the project's skills"
-            case .conversations: "Go back to an earlier conversation in this project, or start a new one"
+            case .conversations: "Open another conversation in this project, or start a new one; each has its own agent"
             case .git: "Point at your changes, a branch or a commit"
             case .rules: "Name a rules file omp works under"
             case .terminal: "Run a command; omp keeps its output to read"
@@ -96,7 +96,7 @@ struct ComposerMenu: View {
     @State private var listing: ProjectListing?
     @State private var rules: [RuleFile]?
     @State private var git: [GitReference]?
-    @State private var conversations: [SessionFile]?
+    @State private var conversationsLoaded = false
     @State private var command = ""
     @FocusState private var focus: Focus?
 
@@ -364,18 +364,18 @@ struct ComposerMenu: View {
                            help: "Start the message with /\(command.name)", action: .insert(.command(command.name)))
             })
         case .conversations:
-            guard let conversations else { return nil }
-            let open = store.active?.sessionFile
+            guard conversationsLoaded, let session = store.active else { return nil }
             let fresh = Row(id: "new", icon: .symbol("plus.bubble"), title: "New conversation",
-                            detail: "Start afresh in this project", counted: false, help: "Start a new conversation",
+                            detail: "Its own agent; this one keeps working", counted: false, help: "Start a new conversation",
                             action: .newConversation)
-            let ranked = FuzzyMatch.rank(conversations, query: query) { [$0.title] }
-            return cap((searching ? [] : [fresh]) + ranked.map { file in
-                Row(id: file.path, icon: .symbol("bubble.left"), title: file.title,
-                    detail: file.modified.formatted(.relative(presentation: .named)),
-                    current: file.path == open,
-                    help: file.path == open ? "The conversation that is open" : "Switch to this conversation",
-                    action: .conversation(file))
+            let ranked = FuzzyMatch.rank(store.conversations(in: session.project.id), query: query) { [$0.title] }
+            return cap((searching ? [] : [fresh]) + ranked.map { conversation in
+                let open = conversation.session === session
+                return Row(id: conversation.id, icon: .symbol("bubble.left"), title: conversation.title,
+                           detail: conversation.date.formatted(.relative(presentation: .named)),
+                           current: open,
+                           help: open ? "The conversation that is open" : "Open this conversation",
+                           action: .conversation(conversation))
             })
         case .git:
             guard let git else { return nil }
@@ -437,8 +437,9 @@ struct ComposerMenu: View {
                 git = await Task.detached { GitReferences.list(in: project) }.value
             }
         case .conversations:
-            if conversations == nil {
-                conversations = await Task.detached { SessionFiles.sessions(for: project) }.value
+            if !conversationsLoaded, let id = store.active?.project.id {
+                await store.loadConversations(id)
+                conversationsLoaded = true
             }
         case .upload, .skills, .terminal, .commands:
             break
@@ -528,7 +529,7 @@ private enum Action {
     case open(ComposerMenu.Page)
     case upload
     case insert(ComposerMenu.Insertion)
-    case conversation(SessionFile)
+    case conversation(Conversation)
     case newConversation
 }
 
